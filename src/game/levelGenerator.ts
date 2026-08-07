@@ -944,9 +944,98 @@ function buildAttempt(depth: number, salt: number, arrow: ArrowDef, relax = 0): 
     // a small neighbourhood and keep the first shot that is a genuine three-star
     // at every rate we ship to. Only if nothing in that neighbourhood works is
     // the layout actually broken.
-    const proven = refinePar(level, arrow);
-    if (!proven) return { level, ok: false };
-    return { level: { ...level, parShot: proven }, ok: true };
+    const settled = proveAtStrongestSafeMotion(level, arrow);
+    if (!settled) return { level, ok: false };
+    return { level: settled, ok: true };
+}
+
+/** Release phases sampled when checking that a course plays at any moment. */
+const PHASE_SAMPLES = 30;
+/**
+ * Sweep span. Drift and iris periods differ per ring, so the combined pattern
+ * does not repeat on any one period — two of the slowest cycle is what makes
+ * the sample dense enough that phases BETWEEN samples behave too.
+ */
+const PHASE_SWEEP_SECONDS = 7.2;
+/** Motion levels tried, strongest first. */
+const MOTION_SCALES = [1, 0.8, 0.62, 0.46, 0.32, 0.2, 0.1, 0] as const;
+
+/** Scale every moving part of a course by the same factor. */
+function withMotionScale(level: LevelData, scale: number): LevelData {
+    const gates = level.gates.map((gate) => ({
+        ...gate,
+        ...(gate.drift
+            ? {
+                  drift: {
+                      ...gate.drift,
+                      ampX: Math.round(gate.drift.ampX * scale),
+                      ampY: Math.round(gate.drift.ampY * scale),
+                  },
+              }
+            : {}),
+        ...(gate.aperture ? { aperture: { ...gate.aperture, amount: gate.aperture.amount * scale } } : {}),
+    }));
+    const target = level.target.drift
+        ? {
+              ...level.target,
+              drift: {
+                  ...level.target.drift,
+                  ampX: Math.round(level.target.drift.ampX * scale),
+                  ampY: Math.round(level.target.drift.ampY * scale),
+              },
+          }
+        : level.target;
+    return { ...level, gates, target };
+}
+
+/**
+ * Turn the course's motion down until par works at EVERY release moment.
+ *
+ * The arrow flies through the ring phase it was released into, so anything that
+ * moves is a hazard the player cannot see coming. Left at full amplitude that
+ * is not a timing mechanic, it is a broken course: measured across 30 release
+ * phases, par failed to even REACH the target on 53% of them at depth 30, and
+ * three-starred on 27%. A player aims correctly and misses because a capital
+ * drifted into the path.
+ *
+ * So the generator keeps the strongest motion that still lets the planned par
+ * clear from any release moment. Most courses keep all of it; the few that
+ * cannot are calmed rather than shipped broken. Returns null only if even a
+ * still course fails, which means the layout is unsound for other reasons.
+ */
+function proveAtStrongestSafeMotion(level: LevelData, arrow: ArrowDef): LevelData | null {
+    const moves = level.gates.some((gate) => gate.drift || gate.aperture) || level.target.drift !== undefined;
+    for (const scale of moves ? MOTION_SCALES : [1]) {
+        const candidate = scale === 1 ? level : withMotionScale(level, scale);
+        // Par has to be refined against THIS motion. Refining first and calming
+        // afterwards silently invalidates the frame-rate proof, because the
+        // shot it proved was flown through a course that no longer exists.
+        const proven = refinePar(candidate, arrow);
+        if (!proven) continue;
+        const withPar = { ...candidate, parShot: proven };
+        if (parClearsAtEveryPhase(withPar, arrow)) return withPar;
+    }
+    return null;
+}
+
+/** Par three-stars from every sampled release phase, not just from zero. */
+function parClearsAtEveryPhase(level: LevelData, arrow: ArrowDef): boolean {
+    const { angle, power } = level.parShot;
+    for (let index = 0; index < PHASE_SAMPLES; index += 1) {
+        const startTime = (index * PHASE_SWEEP_SECONDS) / PHASE_SAMPLES;
+        const shot = createShot(level, angle, arrow, power, startTime);
+        for (let frame = 0; frame < 120 * 14 && shot.outcome === "flying"; frame += 1) {
+            advanceShot(shot, level, 1 / 120, 0, SILENT, arrow);
+        }
+        if (!isPerfectShot(shot, level)) return false;
+        // Margin, not a bare three-star. Without it the chosen motion leaves par
+        // grazing the edge of the bullseye at some phases, so a release BETWEEN
+        // two sampled phases drops a star — which is what a player experiences
+        // as "sometimes it just doesn't count".
+        const face = getTargetFace(level.target, shot.startTime + shot.elapsed);
+        if (Math.abs(shot.position.y - face.centerY) / face.radius > PAR_MARGIN_LIMIT) return false;
+    }
+    return true;
 }
 
 /**

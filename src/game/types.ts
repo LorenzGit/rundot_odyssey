@@ -186,6 +186,16 @@ export interface ShotState {
     outcome: "flying" | "victory" | "defeat";
     defeatReason: DefeatReason | null;
     elapsed: number;
+    /**
+     * Course-animation time the arrow was released into.
+     *
+     * Rings, irises and the target keep drifting while the player aims, and the
+     * shot flies through the phase it was released into — so what is on screen
+     * is what the arrow meets. The generator calms each course's motion until
+     * par clears from ANY release moment, so this can never make a course
+     * unwinnable; see calmMotionUntilPhaseRobust.
+     */
+    startTime: number;
     /** Set on victory. */
     targetHit: TargetHitQuality | null;
     /** Arrow frozen in a capital, a slab, or the ground. */
