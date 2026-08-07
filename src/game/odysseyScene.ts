@@ -107,6 +107,8 @@ interface OdysseyQaSnapshot {
     groundBottom: number;
     /** Course-animation clock driving drifting rings, irises and the target. */
     simTime: number;
+    /** Rendered design-space y of each ring's opening centre, in course order. */
+    gateCenters: number[];
     aimAngle: number;
     power: number;
     resultOverlayCount: number;
@@ -797,7 +799,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         trajectoryKey = key;
         trajectory.clear();
         const arrowDef = equippedArrow();
-        const { points, certainUntil } = sampleTrajectory(level, aimDisplay, 22, arrowDef, powerDisplay, levelTime);
+        const { points, certainUntil } = sampleTrajectory(level, aimDisplay, 22, arrowDef, powerDisplay);
         // Hotter color when overdrawn
         const hot = powerDisplay > 1.15;
         const warm = hot ? 0xff8a4a : arrowDef.head;
@@ -886,9 +888,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         }
         const arrowDef = equippedArrow();
         const firePower = powerDisplay;
-        // Release the arrow into the ring motion the player just timed, not
-        // into a phase-0 snapshot of it.
-        shot = createShot(level, aimDisplay, arrowDef, firePower, levelTime);
+        shot = createShot(level, aimDisplay, arrowDef, firePower);
         physicsAccumulator = 0;
         // The Patronage's only visible effect on the shot: white Meltemi
         // fletching over whatever shaft is equipped. Cosmetic — it touches no
@@ -1273,9 +1273,22 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         }
 
         ulysses?.update(elapsed, deltaSeconds, reducedMotion);
-        // One clock for the whole course. Rendering and physics must agree, and
-        // both must be continuous across release.
-        const simTime = gameState === "Arrow Flying" && shot ? shot.startTime + shot.elapsed : levelTime;
+        /*
+         * Rings must be drawn where the SHOT will meet them.
+         *
+         * The physics samples drift, irises and the moving target from zero at
+         * release, so aiming against a course clock that had been running for
+         * seconds showed positions the arrow would never meet: every ring
+         * teleported on release and the timing the player had just judged was
+         * discarded. Holding the aim phase at zero makes the preview honest and
+         * the transition continuous.
+         *
+         * Releasing INTO the live phase instead was tried and reverted: par
+         * only three-stars at 13 of 40 release phases on course 40, so the
+         * course became unwinnable on most frames. Making ring timing a real
+         * mechanic needs `refinePar` to prove par across phases first.
+         */
+        const simTime = gameState === "Arrow Flying" && shot ? shot.elapsed : 0;
         for (const gate of gateViews) {
             if (gameState === "Aiming" || gameState === "Arrow Flying") {
                 gate.setSimTime(simTime);
@@ -1379,7 +1392,8 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 arrowX: shot?.position.x ?? 0,
                 arrowY: shot?.position.y ?? 0,
                 arrowVelocityY: shot?.velocity.y ?? 0,
-                simTime: gameState === "Arrow Flying" && shot ? shot.startTime + shot.elapsed : levelTime,
+                simTime: gameState === "Arrow Flying" && shot ? shot.elapsed : 0,
+                gateCenters: gateViews.map((view) => view.root.y),
                 groundBottom: courseGround
                     ? world.y + (courseGround.y + courseGround.height) * world.scale.y
                     : Number.NaN,

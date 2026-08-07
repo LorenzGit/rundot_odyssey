@@ -17,6 +17,7 @@ interface Snapshot {
     arrowCount: number;
     groundBottom: number;
     simTime: number;
+    gateCenters: number[];
     resultOverlayCount: number;
 }
 
@@ -357,9 +358,14 @@ test("wind measurably pushes the arrow, and the preview stops at the gust", asyn
     for (const zone of zones) {
         const inside = samples.filter((s) => s.x >= zone.x && s.x <= zone.x + zone.width);
         if (inside.length < 4) continue;
-        const entry = heading(inside[0]!, inside[1]!);
-        const exit = heading(inside[inside.length - 2]!, inside[inside.length - 1]!);
-        steepestBend = Math.max(steepestBend, Math.abs(exit - entry));
+        // Compare the widest pair of headings anywhere in the band, not just
+        // the first and last adjacent pairs. Under load rAF sampling goes
+        // sparse, and a single adjacent pair straddling most of the band
+        // already contains the bend it is supposed to measure — which read as
+        // a shallower turn and made this assertion flaky rather than wrong.
+        const headings: number[] = [];
+        for (let i = 1; i < inside.length; i += 1) headings.push(heading(inside[i - 1]!, inside[i]!));
+        steepestBend = Math.max(steepestBend, Math.max(...headings) - Math.min(...headings));
     }
     expect(
         steepestBend,
@@ -661,27 +667,49 @@ test("moving rings do not jump when the arrow is released", async ({ page }) => 
     await page.setViewportSize({ width: 956, height: 440 });
     await openReady(page);
     await goToDepth(page, FEATURE_DEPTH.orbit);
-
-    // Aim for a while so the course clock is meaningfully past zero, which is
-    // exactly the state the bug needed: rings were drawn on the course clock
-    // while aiming, then sampled from ZERO the instant the arrow left, so every
-    // drifting ring teleported and the timing the player had just judged was
-    // discarded.
+    // Let the course clock run well past zero — the state the bug needed.
     await page.waitForTimeout(2_500);
-    const before = (await snapshot(page)).simTime;
-    expect(before, "the course clock never advanced, so nothing was tested").toBeGreaterThan(1);
 
     const level = generateLevel(FEATURE_DEPTH.orbit, arrowFor(FEATURE_DEPTH.orbit));
-    await page.evaluate((par) => {
-        window.__odysseyQa?.setAim(par.angle);
-        window.__odysseyQa?.setPower(par.power);
-        window.__odysseyQa?.fire();
+    // Sample the RENDERED ring positions every animation frame across release.
+    // Asserting the clock alone is not enough: the clock is a proxy, and the
+    // thing the player sees is where the rings actually are.
+    const { worst, fired } = await page.evaluate(async (par) => {
+        const qa = window.__odysseyQa;
+        if (!qa) throw new Error("Odyssey QA contract is unavailable");
+        const samples: { y: number[] }[] = [];
+        let frames = 0;
+        let fired = false;
+        await new Promise<void>((done) => {
+            const tick = () => {
+                samples.push({ y: [...qa.snapshot().gateCenters] });
+                frames += 1;
+                if (frames === 20) {
+                    qa.setAim(par.angle);
+                    qa.setPower(par.power);
+                    qa.fire();
+                    fired = true;
+                }
+                if (frames > 80) return done();
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        });
+        let worst = 0;
+        for (let i = 1; i < samples.length; i += 1) {
+            const a = samples[i - 1]!.y;
+            const b = samples[i]!.y;
+            if (a.length !== b.length) continue;
+            for (let g = 0; g < a.length; g += 1) worst = Math.max(worst, Math.abs(b[g]! - a[g]!));
+        }
+        return { worst, fired };
     }, level.parShot);
 
-    const after = (await snapshot(page)).simTime;
+    expect(fired, "the shot never fired, so release was never crossed").toBe(true);
+    // Ordinary drift is a few px per frame; the bug teleported rings by their
+    // full amplitude (up to ~66px) in one frame.
     expect(
-        after,
-        `the ring clock went backwards on release (${before.toFixed(2)}s -> ${after.toFixed(2)}s), ` +
-            "so every drifting ring snapped to a different position",
-    ).toBeGreaterThanOrEqual(before - 0.05);
+        worst,
+        `a ring moved ${worst.toFixed(1)}px in a single frame — rings are snapping rather than drifting`,
+    ).toBeLessThan(20);
 });

@@ -149,7 +149,6 @@ export function createShot(
     angleDegrees: number,
     arrow: ArrowDef = getArrow("reed"),
     power: number = SHOT_CONFIG.defaultPower,
-    startTime = 0,
 ): ShotState {
     const radians = (clampAimAngle(angleDegrees) * Math.PI) / 180;
     const speed = launchSpeedFor(arrow, power);
@@ -166,7 +165,6 @@ export function createShot(
         outcome: "flying",
         defeatReason: null,
         elapsed: 0,
-        startTime,
         targetHit: null,
         stuck: false,
         arrowId: arrow.id,
@@ -600,7 +598,7 @@ function integrateSlice(
         }
 
         // Sample drift at the middle of the slice actually travelled.
-        const sliceMidTime = shot.startTime + shot.elapsed + dt * (earliest ? earliest.impact.t : 1) * 0.5;
+        const sliceMidTime = shot.elapsed + dt * (earliest ? earliest.impact.t : 1) * 0.5;
         const contact = earliest ? pointAlong(from, to, earliest.impact.t) : to;
         if (resolveSegment(shot, level, from, contact, sliceMidTime, events, arrow)) return;
 
@@ -676,7 +674,6 @@ export function sampleTrajectory(
     count = 28,
     arrow: ArrowDef = getArrow("reed"),
     power: number = SHOT_CONFIG.defaultPower,
-    startTime = 0,
 ): TrajectoryPreview {
     const silent: ShotEvents = { onGate() {}, onVictory() {}, onDefeat() {} };
     const dt = 1 / 120;
@@ -688,9 +685,7 @@ export function sampleTrajectory(
 
     const path: Point[] = [];
     let certain = -1;
-    // Same release phase as the real shot, so the dotted arc is drawn against
-    // the ring positions the player is actually looking at.
-    const shot = createShot(level, angleDegrees, arrow, power, startTime);
+    const shot = createShot(level, angleDegrees, arrow, power);
     for (let frame = 0; frame < 120 * 6; frame += 1) {
         // Collecting rings here would mark them for the real shot, and steering
         // is the player's live input rather than a prediction.
