@@ -115,6 +115,41 @@ input:focus-visible {
     background: #3aa6e0;
 }
 
+/**
+ * Covers the canvas host until the renderer has a frame. Without it the host's
+ * flat Aegean fill is the entire screen for the length of a scene build, which
+ * reads as a blue flash on every entry into a course.
+ */
+.canvas-curtain {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: radial-gradient(120% 90% at 50% 40%, #0d3a5c 0%, #06203a 60%, #04162a 100%);
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 220ms ease-out,
+        visibility 0s linear 220ms;
+}
+
+/*
+ * `visibility` is stepped at the end of the fade, not just opacity. A
+ * full-screen gradient left at opacity 0 is still a composited layer on every
+ * frame for the rest of the session, which measurably cost frame rate over the
+ * canvas — enough to coarsen rAF sampling in the wind regression test.
+ */
+.canvas-curtain.is-lifted {
+    opacity: 0;
+    visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .canvas-curtain {
+        transition: visibility 0s;
+    }
+}
+
 #game-host > div,
 #game-host canvas {
     position: absolute;

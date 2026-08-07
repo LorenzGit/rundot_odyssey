@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { audioManager } from "../audio/audioManager.ts";
 import { DRACHMAE_PACKS, drachmaePackBonusPercent } from "../config/platform.ts";
+import { getRunCapabilities } from "../sdk/runSdk.ts";
 import { formatNumber, t } from "../systems/localization.ts";
 import {
+    catalogResolved,
     productView,
     purchaseProduct,
     reconcilePendingPurchase,
@@ -66,11 +68,22 @@ export default function ShopScreen() {
 
     const patronage = productView("navigators_patronage");
     const packs = PACK_PRODUCTS.map((pack) => ({ ...pack, view: productView(pack.productId) }));
+    const capabilities = getRunCapabilities();
     // One honest reason the card cannot be tapped, never a placeholder claim.
-    const blocked = runtimeServices.config.shopEnabled ? t("SettingsUnavailable") : "SHOP CLOSED";
+    const blockedReason = (view: ProductView): string => {
+        if (!capabilities.purchases || capabilities.mock) return t("SettingsUnavailable");
+        if (!runtimeServices.config.shopEnabled) return "SHOP CLOSED";
+        // The storefront answered and does not carry this item, or never
+        // answered at all. Either way there is nothing to check out.
+        return catalogResolved() && !view.offered ? "NOT IN STORE" : "PRICE NOT SYNCED";
+    };
 
     const buy = async (view: ProductView) => {
-        await audioManager.unlock();
+        // Deliberately NOT awaiting audioManager.unlock() here. Opening a host
+        // checkout needs no audio, and unlocking first builds the AudioContext
+        // and starts the music element microseconds before withHostOverlay
+        // pauses and suspends the very same context — a pointless round trip
+        // through the platform's most fragile API on the way to a payment.
         setBusyProduct(view.productId);
         const outcome = await purchaseProduct(view.productId);
         setBusyProduct(null);
@@ -120,7 +133,7 @@ export default function ShopScreen() {
                     ? view.pendingReconciliation
                         ? "RETRY LAST ORDER"
                         : label
-                    : blocked}
+                    : blockedReason(view)}
         </button>
     );
 

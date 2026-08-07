@@ -23,6 +23,8 @@ declare global {
     interface Window {
         /** Instrumentation installed by `instrumentAudio` before the app boots. */
         __cueFrequencies?: number[];
+        /** Set by the curtain test: was the curtain already lifted when it first appeared? */
+        __curtainFirstSeenLifted?: boolean | null;
         __vibrations?: (number | number[])[];
     }
 }
@@ -621,3 +623,35 @@ for (const viewport of [
         }
     });
 }
+
+test("entering a course never flashes the bare canvas host", async ({ page }) => {
+    await page.setViewportSize({ width: 758, height: 460 });
+    // Watch the DOM from before load instead of sampling after the fact: on a
+    // warm cache the scene builds in a few frames, so any polled assertion
+    // races the curtain's own fade rather than testing it.
+    await page.addInitScript(() => {
+        window.__curtainFirstSeenLifted = null;
+        new MutationObserver(() => {
+            const el = document.querySelector(".canvas-curtain");
+            if (el && window.__curtainFirstSeenLifted === null) {
+                window.__curtainFirstSeenLifted = el.classList.contains("is-lifted");
+            }
+        }).observe(document, { childList: true, subtree: true, attributes: true });
+    });
+
+    await page.goto("/?renderer=webgl&qa=1");
+    await page.getByRole("button", { name: /^(play|continue)$/i }).click();
+    await page.waitForFunction(() => window.odysseyReady === true, null, { timeout: 30_000 });
+
+    // The host div is painted a flat Aegean so a slipped frame is never black,
+    // but for the whole length of a scene build that fill WAS the screen — a
+    // full-frame blue flash on every entry into a course.
+    expect(
+        await page.evaluate(() => window.__curtainFirstSeenLifted),
+        "no curtain ever covered the canvas host, or it was already lifted when it appeared",
+    ).toBe(false);
+
+    const curtain = page.locator(".canvas-curtain");
+    await expect(curtain, "the curtain never lifted, so the course is hidden behind it").toHaveClass(/is-lifted/);
+    await expect.poll(async () => curtain.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 }).toBe("0");
+});

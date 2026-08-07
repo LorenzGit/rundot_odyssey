@@ -48,6 +48,21 @@ export const monetizationTelemetry = createMonetizationTelemetry({
 /** False whenever ownership could not be read; it never means "owns nothing". */
 let entitlementsAuthoritative = false;
 const livePrices = new Map<ProductId, string>();
+/**
+ * Catalog item ids the live storefront actually offers, or `null` while that
+ * has never been read successfully.
+ *
+ * Checkout is gated on this. Capability + LiveOps + a non-placeholder id only
+ * prove the game is *configured* to sell something; they say nothing about
+ * whether the server has the item. Opening a host checkout for an id the
+ * storefront does not carry is asking the host to price something that does
+ * not exist, and `null` (unknown) must fail closed exactly like absent.
+ */
+let liveCatalogItemIds: Set<string> | null = null;
+
+export function catalogResolved(): boolean {
+    return liveCatalogItemIds !== null;
+}
 
 export function entitlementsReady(): boolean {
     return entitlementsAuthoritative;
@@ -232,6 +247,8 @@ export interface ProductView {
     name: string;
     /** Repeatable packs are never owned; only durables can be. */
     consumable: boolean;
+    /** The live storefront is currently carrying this item. */
+    offered: boolean;
     owned: boolean;
     /** True when `owned` rests on the save's last authoritative read, not a live one. */
     ownedFromSave: boolean;
@@ -253,6 +270,10 @@ export function productView(productId: ProductId): ProductView {
     // LiveOps gating is runtimeServices' existing fail-closed shop switch —
     // reused rather than duplicated here.
     const hostReady = configured && runtimeServices.config.shopEnabled && capabilities.purchases && !capabilities.mock;
+    // The storefront must be carrying this exact item, right now, with a price
+    // we could read. Without this the shop happily opened a host checkout for
+    // an id the catalog had never heard of.
+    const offered = liveCatalogItemIds?.has(definition.catalogItemId) === true;
 
     const consumable = definition.kind === "consumable";
     const owned = !consumable && store.get().ownedProductIds.includes(productId);
@@ -262,10 +283,34 @@ export function productView(productId: ProductId): ProductView {
         consumable,
         owned,
         ownedFromSave: owned && !entitlementsAuthoritative,
-        purchasable: hostReady && !owned,
+        offered,
+        purchasable: hostReady && offered && livePrices.get(productId) != null && !owned,
         pendingReconciliation: store.get().pendingPurchaseIntent?.productId === productId,
         price: livePrices.get(productId) ?? null,
     };
+}
+
+/** Read the live storefront so checkout can be gated on what it really offers. */
+async function syncCatalog(): Promise<void> {
+    if (!getRunCapabilities().purchases) return;
+    try {
+        const catalog = await withTimeout(RundotGameAPI.shop.getCatalog(), 4_000, "shop.getCatalog");
+        const live = new Set<string>();
+        for (const item of catalog.items) {
+            if (item.active === false) continue;
+            live.add(item.itemId);
+            const product = products.byCatalogItemId(item.itemId);
+            const value = (item.price as { value?: unknown } | undefined)?.value;
+            if (product && (typeof value === "string" || typeof value === "number")) {
+                livePrices.set(product.id as ProductId, String(value));
+            }
+        }
+        liveCatalogItemIds = live;
+    } catch (error) {
+        // Leave the previous answer in place; a failed read is not evidence
+        // that the storefront is empty, and never widens what is purchasable.
+        console.warn("[monetization] live catalog unavailable", error);
+    }
 }
 
 let refreshInFlight: Promise<void> | null = null;
@@ -276,6 +321,7 @@ export async function refreshCommerce(): Promise<void> {
     refreshInFlight = (async () => {
         await Promise.all([
             syncEntitlements(),
+            syncCatalog(),
             ...products.all().map(async (product) => {
                 const price = await readShopPrice(product.catalogItemId);
                 if (price !== null) livePrices.set(product.id as ProductId, price);

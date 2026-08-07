@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Application } from "pixi.js";
 import {
     acquireRendererRuntime,
@@ -26,6 +26,11 @@ async function initialize(scope: RendererLifecycleScope, host: HTMLElement): Pro
 
 export default function GameCanvas() {
     const hostRef = useRef<HTMLDivElement | null>(null);
+    // Building the Pixi app and scene is async, and #game-host is painted the
+    // Aegean fill that stops black gutters. Between leaving the menu and the
+    // first rendered frame that fill was the whole screen — a solid blue flash.
+    // Hold a curtain over it until there is something to show.
+    const [ready, setReady] = useState(false);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -36,12 +41,16 @@ export default function GameCanvas() {
         void acquireRendererRuntime("odyssey-pixi", abortController.signal, (scope) => initialize(scope, host))
             .then((nextLease) => {
                 lease = nextLease;
+                if (!abortController.signal.aborted) setReady(true);
             })
             .catch((error: unknown) => {
                 if (abortController.signal.aborted || (error instanceof DOMException && error.name === "AbortError"))
                     return;
                 console.error("[odyssey] renderer initialization failed", error);
                 document.documentElement.dataset.odysseyError = "renderer";
+                // Never leave the curtain up on failure — the error surface
+                // has to be reachable.
+                setReady(true);
             });
 
         return () => {
@@ -50,5 +59,10 @@ export default function GameCanvas() {
         };
     }, []);
 
-    return <div ref={hostRef} data-testid="odyssey-canvas-host" />;
+    return (
+        <>
+            <div ref={hostRef} data-testid="odyssey-canvas-host" />
+            <div className={`canvas-curtain${ready ? " is-lifted" : ""}`} aria-hidden="true" />
+        </>
+    );
 }
