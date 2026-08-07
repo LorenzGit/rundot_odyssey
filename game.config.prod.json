@@ -1,8 +1,13 @@
 {
-  "gameId": "ODYSSEY_PROTOTYPE_NOT_INITIALIZED",
+  "gameId": "5XviCkzjeRsHvxeH55wu",
   "relativePathToDistFolder": "dist",
   "usesPreloader": false,
-  "orientation": "Landscape",
-  "keywords": ["archery", "greek", "skill", "arcade"],
+  "orientation": "landscape",
+  "keywords": [
+    "archery",
+    "greek",
+    "skill",
+    "arcade"
+  ],
   "kitId": null
 }
