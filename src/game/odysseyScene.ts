@@ -105,6 +105,8 @@ interface OdysseyQaSnapshot {
     windZones: { x: number; width: number; accelY: number; accelX: number }[];
     /** Design-space y where the ground haze ends; must reach the frame bottom. */
     groundBottom: number;
+    /** Course-animation clock driving drifting rings, irises and the target. */
+    simTime: number;
     aimAngle: number;
     power: number;
     resultOverlayCount: number;
@@ -785,13 +787,17 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
             return;
         }
         // The GDD asks for a preview that only rebuilds when the aim changes;
-        // it used to rebuild ~25 filled circles every frame regardless.
-        const key = `${aimDisplay.toFixed(2)}|${powerDisplay.toFixed(3)}|${arrowProgress.equipped}`;
+        // it used to rebuild ~25 filled circles every frame regardless. The
+        // release phase is part of the key now — a drifting capital can
+        // intercept an arc that a moment earlier was clear — but quantized to
+        // ~8 Hz so a still thumb does not rebuild 25 dots every frame.
+        const phaseTick = Math.round(levelTime * 8);
+        const key = `${aimDisplay.toFixed(2)}|${powerDisplay.toFixed(3)}|${arrowProgress.equipped}|${phaseTick}`;
         if (key === trajectoryKey) return;
         trajectoryKey = key;
         trajectory.clear();
         const arrowDef = equippedArrow();
-        const { points, certainUntil } = sampleTrajectory(level, aimDisplay, 22, arrowDef, powerDisplay);
+        const { points, certainUntil } = sampleTrajectory(level, aimDisplay, 22, arrowDef, powerDisplay, levelTime);
         // Hotter color when overdrawn
         const hot = powerDisplay > 1.15;
         const warm = hot ? 0xff8a4a : arrowDef.head;
@@ -880,7 +886,9 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         }
         const arrowDef = equippedArrow();
         const firePower = powerDisplay;
-        shot = createShot(level, aimDisplay, arrowDef, firePower);
+        // Release the arrow into the ring motion the player just timed, not
+        // into a phase-0 snapshot of it.
+        shot = createShot(level, aimDisplay, arrowDef, firePower, levelTime);
         physicsAccumulator = 0;
         // The Patronage's only visible effect on the shot: white Meltemi
         // fletching over whatever shaft is equipped. Cosmetic — it touches no
@@ -1265,7 +1273,9 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         }
 
         ulysses?.update(elapsed, deltaSeconds, reducedMotion);
-        const simTime = gameState === "Arrow Flying" && shot ? shot.elapsed : levelTime;
+        // One clock for the whole course. Rendering and physics must agree, and
+        // both must be continuous across release.
+        const simTime = gameState === "Arrow Flying" && shot ? shot.startTime + shot.elapsed : levelTime;
         for (const gate of gateViews) {
             if (gameState === "Aiming" || gameState === "Arrow Flying") {
                 gate.setSimTime(simTime);
@@ -1369,6 +1379,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 arrowX: shot?.position.x ?? 0,
                 arrowY: shot?.position.y ?? 0,
                 arrowVelocityY: shot?.velocity.y ?? 0,
+                simTime: gameState === "Arrow Flying" && shot ? shot.startTime + shot.elapsed : levelTime,
                 groundBottom: courseGround
                     ? world.y + (courseGround.y + courseGround.height) * world.scale.y
                     : Number.NaN,

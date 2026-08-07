@@ -186,6 +186,17 @@ export interface ShotState {
     outcome: "flying" | "victory" | "defeat";
     defeatReason: DefeatReason | null;
     elapsed: number;
+    /**
+     * Course-animation time when the arrow was released.
+     *
+     * Drifting rings, irises and a moving target are all sampled at
+     * `startTime + elapsed`, so their motion runs CONTINUOUSLY from what the
+     * player was looking at while aiming. Sampling from zero instead teleported
+     * every moving ring to its phase-0 position on release, which made the
+     * timing the player had just judged meaningless. Safe to vary because the
+     * generator sizes each opening to clear its own motion at any phase.
+     */
+    startTime: number;
     /** Set on victory. */
     targetHit: TargetHitQuality | null;
     /** Arrow frozen in a capital, a slab, or the ground. */

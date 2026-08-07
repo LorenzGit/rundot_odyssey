@@ -16,6 +16,7 @@ interface Snapshot {
     visibleRect: { x: number; y: number; width: number; height: number };
     arrowCount: number;
     groundBottom: number;
+    simTime: number;
     resultOverlayCount: number;
 }
 
@@ -654,4 +655,33 @@ test("entering a course never flashes the bare canvas host", async ({ page }) =>
     const curtain = page.locator(".canvas-curtain");
     await expect(curtain, "the curtain never lifted, so the course is hidden behind it").toHaveClass(/is-lifted/);
     await expect.poll(async () => curtain.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 }).toBe("0");
+});
+
+test("moving rings do not jump when the arrow is released", async ({ page }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    await openReady(page);
+    await goToDepth(page, FEATURE_DEPTH.orbit);
+
+    // Aim for a while so the course clock is meaningfully past zero, which is
+    // exactly the state the bug needed: rings were drawn on the course clock
+    // while aiming, then sampled from ZERO the instant the arrow left, so every
+    // drifting ring teleported and the timing the player had just judged was
+    // discarded.
+    await page.waitForTimeout(2_500);
+    const before = (await snapshot(page)).simTime;
+    expect(before, "the course clock never advanced, so nothing was tested").toBeGreaterThan(1);
+
+    const level = generateLevel(FEATURE_DEPTH.orbit, arrowFor(FEATURE_DEPTH.orbit));
+    await page.evaluate((par) => {
+        window.__odysseyQa?.setAim(par.angle);
+        window.__odysseyQa?.setPower(par.power);
+        window.__odysseyQa?.fire();
+    }, level.parShot);
+
+    const after = (await snapshot(page)).simTime;
+    expect(
+        after,
+        `the ring clock went backwards on release (${before.toFixed(2)}s -> ${after.toFixed(2)}s), ` +
+            "so every drifting ring snapped to a different position",
+    ).toBeGreaterThanOrEqual(before - 0.05);
 });
