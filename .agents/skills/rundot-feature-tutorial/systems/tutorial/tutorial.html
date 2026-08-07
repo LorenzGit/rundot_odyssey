@@ -1,0 +1,28 @@
+<!--
+  Tutorial overlay DOM — paste this block into the host game's index.html
+  as the LAST child of <body> (or of the game's root container), so it
+  paints above every screen, dialog, and HUD element. It is position:fixed
+  with z-index 220 (see tutorial.css) — adjust the z-index if the host has
+  higher layers.
+
+  Ids are the defaults tutorial.ts looks for; if they collide with the
+  host, rename them here AND pass `overlayIds` to createTutorials().
+
+  The `.tut-char` portrait box is optional: tutorial.ts's attach() sets
+  the img src from config.portraitUrl, or hides the whole box when no
+  portrait is configured — you can also delete the block entirely.
+
+  Starts with class="hidden" so nothing flashes before attach().
+-->
+<div id="tutorial-overlay" class="hidden">
+    <div class="tut-mask"></div>
+    <div class="tut-box" id="tut-box">
+        <div class="tut-char">
+            <img src="" alt="">
+        </div>
+        <div class="tut-right">
+            <div class="tut-text" id="tut-text"></div>
+            <div class="tut-continue" id="tut-continue"></div>
+        </div>
+    </div>
+</div>

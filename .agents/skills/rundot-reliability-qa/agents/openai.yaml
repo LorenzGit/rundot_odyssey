@@ -1,0 +1,3 @@
+interface:
+  display_name: "RUN Reliability QA"
+  short_description: "Test performance, resilience, and release readiness"

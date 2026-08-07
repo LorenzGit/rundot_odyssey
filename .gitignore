@@ -1,0 +1,55 @@
+# Dependencies, caches, and build output
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.local
+game.config.playground.json
+*.pem
+*.key
+*.p12
+
+# RUN local/operator state (keep reviewed source configs elsewhere)
+.rundot/
+rundot-session*
+player-snapshot*
+campaign-state*
+
+# Test and QA output
+coverage/
+playwright-report/
+test-results/
+# QA capture output at any depth (docs/screenshots/ is regenerated, not reviewed).
+# README artwork lives in docs/media/ so it is NOT swept up by this.
+screenshots/
+.viewdeck/
+tmp/
+*.tmp.mjs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local agent/session state
+.claude/
+.codex/
+# Local art references pulled in while working; not part of the game
+reference.png
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~

@@ -1,0 +1,14 @@
+{
+  "entities": {
+    "template_tokens": {
+      "tags": ["currency", "template"],
+      "clientViewable": true,
+      "metadata": { "displayName": "Template Tokens" }
+    },
+    "template_actions": {
+      "tags": ["progress", "template"],
+      "clientViewable": true,
+      "metadata": { "displayName": "Template Actions" }
+    }
+  }
+}

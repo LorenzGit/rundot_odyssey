@@ -1,0 +1,33 @@
+<!--
+  Daily Quests panel markup — paste into the host's index.html.
+
+  Placement: near the end of <body>, as a sibling of the game's other
+  overlays/dialogs (NOT inside a screen that gets hidden/cleared), so the
+  fixed-position panel can sit above everything. Check that z-index 220 in
+  dailyQuests.css clears the host's topmost UI, and link dailyQuests.css
+  from the host's stylesheet bundle.
+
+  Already have a screen/navigation system? Skip this file: give the host
+  screen a body container with class "daily-quests quest-list" (the first
+  class carries the CSS theme variables) and pass that element to
+  openDailyQuests()/renderDailyQuests() — the renderer builds everything
+  (header, rows, empty states) inside it. That is exactly how the source
+  game shipped: its quests screen was just an empty .screen-body div.
+
+  The .quest-list stays empty here — dailyQuestsScreen.ts fills it on open.
+  Wire the buttons yourself (see README step 5):
+    open:  await refreshServerTime(); openDailyQuests(panelEl, dailyQuests, {...})
+    close: #daily-quests-close click -> closeDailyQuests(panelEl)
+-->
+<div id="daily-quests-panel" class="hidden">
+    <div class="quests-backdrop"></div>
+    <div class="daily-quests-box">
+        <!-- ADAPT: title copy/localization -->
+        <div class="quests-title">DAILY QUESTS</div>
+        <div class="quest-list"></div>
+        <div class="quests-close-row">
+            <!-- ADAPT: reuse the host's standard button class if it has one -->
+            <button id="daily-quests-close" class="quests-close-btn">CLOSE</button>
+        </div>
+    </div>
+</div>

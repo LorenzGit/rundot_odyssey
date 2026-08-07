@@ -1,0 +1,6 @@
+{
+  "lifecycle": {
+    "onStart": "initialize_template_state",
+    "onReset": "initialize_template_state"
+  }
+}

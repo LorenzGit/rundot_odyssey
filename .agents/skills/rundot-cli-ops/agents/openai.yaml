@@ -1,0 +1,4 @@
+interface:
+  display_name: "RUN CLI Operations"
+  short_description: "Operate and troubleshoot the rundot CLI"
+  default_prompt: "Use $rundot-cli-ops to run this RUN.world CLI workflow safely."

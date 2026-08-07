@@ -1,0 +1,17 @@
+{
+  "rooms": [
+    {
+      "type": "template-demo-room",
+      "file": "additional_features/multiplayer/realtimeServer.ts",
+      "export": "default",
+      "config": {
+        "maxPlayers": 4,
+        "idleTimeout": 300,
+        "autoPersist": true,
+        "persistInterval": 5000,
+        "allowReconnect": true,
+        "reconnectTimeout": 30
+      }
+    }
+  ]
+}

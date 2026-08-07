@@ -1,0 +1,3 @@
+interface:
+  display_name: "RUN.world LiveOps"
+  short_description: "Safely run events, remote config, and experiments"

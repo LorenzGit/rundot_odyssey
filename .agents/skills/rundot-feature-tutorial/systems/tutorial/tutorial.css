@@ -1,0 +1,228 @@
+/* Tutorial overlay — dark mask, spotlight cutout, floating speech card,
+   speech-bubble arrow. Pairs with tutorial.ts + tutorial.html.
+
+   The overlay is a TWO-LAYER affair:
+
+     1. `.tut-mask` — the dark backdrop. Two modes:
+          • Default (no `has-spotlight` class): full-screen translucent
+            black via `inset:0` + a flat background.
+          • Spotlight (`has-spotlight`): a small div positioned (via
+            inline left/top/width/height set by tutorial.ts) precisely
+            over the element being highlighted. The element ITSELF gets
+            no z-index trickery — the mask uses a giant `box-shadow` to
+            darken everything OUTSIDE its bounds while the cutout stays
+            transparent, so the UI underneath shines through at its
+            natural brightness.
+        In both modes `pointer-events:none`, so clicks fall through to
+        the overlay container's dismiss handler.
+
+     2. `.tut-box` — the character portrait + speech card. Sits against
+        the bottom of the overlay's flex container by default; when a
+        spotlight is active, tutorial.ts switches it to `.floating` and
+        positions it just outside the cutout, optionally with a
+        CSS-triangle speech-bubble pointer aimed at the target.
+
+   Click-to-dismiss lives on the OUTER `#tutorial-overlay` — clicks
+   anywhere (including over the spotlit cutout, thanks to the mask's
+   pointer-events:none) advance the tutorial. */
+
+/* ADAPT: theme. Override these to match the host game's palette — the
+   defaults are deliberately neutral (dark card, light text, soft white
+   accent). */
+:root {
+    --tut-mask-color: rgba(0, 0, 0, 0.85); /* the darkness */
+    --tut-accent: #cccccc; /* card border, arrow outline, halo ring */
+    --tut-accent-glow: rgba(204, 204, 204, 0.25); /* soft glow around card + arrow */
+    --tut-card-bg: rgba(16, 16, 16, 0.96); /* card + arrow fill (keep them equal) */
+    --tut-text-color: #eeeeee;
+    --tut-hint-color: #777777; /* "tap to continue" */
+    --tut-portrait-border: rgba(204, 204, 204, 0.4);
+    --tut-portrait-bg: rgba(32, 32, 32, 0.6);
+}
+
+/* ADAPT: z-index must clear every other layer in the host game (dialogs,
+   toasts and HUD. */
+#tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 220;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    cursor: pointer;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+/* Use visibility:hidden + opacity:0 instead of display:none to avoid a
+   white-flash repaint glitch on some Android Chromium WebViews where
+   toggling display on a large fixed overlay triggers a full-screen
+   composite invalidation. pointer-events:none ensures the hidden overlay
+   doesn't intercept taps. */
+#tutorial-overlay.hidden {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Default-state mask: full-screen flat darken, no cutout. When JS adds
+   `.has-spotlight`, the inline left/top/width/height shrink it down to
+   the spotlight rect and the box-shadow rule below takes over the
+   actual darkening. */
+.tut-mask {
+    position: absolute;
+    inset: 0;
+    background: var(--tut-mask-color);
+    pointer-events: none;
+}
+.tut-mask.has-spotlight {
+    /* Reset the default `inset:0`; JS-supplied left/top/width/height
+       place this div right over the highlighted element. */
+    inset: auto;
+    background: transparent;
+    /* Box-shadow trick: a 9999px solid shadow projected outside the
+       element's box paints darkness across the rest of the viewport.
+       The cutout itself stays clear, revealing the underlying UI at
+       its natural brightness. */
+    box-shadow: 0 0 0 9999px var(--tut-mask-color);
+}
+/* Optional accent halo around the cutout — toggled by the `halo` config
+   flag in tutorial.ts. Off by default: the dark mask alone isolates the
+   spotlit element clearly, and the ring competes visually with the
+   speech bubble's own glowing border. */
+.tut-mask.has-spotlight.halo {
+    box-shadow:
+        0 0 0 9999px var(--tut-mask-color),
+        inset 0 0 0 2px var(--tut-accent),
+        inset 0 0 28px var(--tut-accent-glow);
+}
+/* Force the spotlit element to its fully-bright look while the tutorial
+   is up — without this, elements with a dim "disabled"/"muted" style
+   (e.g. a :disabled button at opacity:0.3) render as a dark shape inside
+   the brightly-cut-out area, making the spotlight read as "the element
+   is behind the darkness" even though it isn't. We don't change
+   pointer-events here — clicks still land on the overlay's dismiss
+   handler because the overlay sits above the spotlit element. */
+.tut-spotlit {
+    opacity: 1 !important;
+}
+
+.tut-box {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    background: var(--tut-card-bg);
+    border: 2px solid var(--tut-accent);
+    box-shadow: 0 0 30px var(--tut-accent-glow);
+    padding: 12px;
+    max-width: 400px;
+    width: 100%;
+}
+/* Spotlight-active mode: tutorial.ts drops the box out of the overlay's
+   flex flow and positions it absolutely just outside the cutout — `top`
+   for arrow:top (box BELOW the spotlit element) or `bottom` for
+   arrow:bottom (box ABOVE it). Centred horizontally via the classic
+   50%-translate trick; max-width keeps it readable on wide screens. */
+.tut-box.floating {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+}
+/* Speech-bubble pointer — opt-in via .arrow-top / .arrow-bottom on the
+   box. CSS-triangle technique: a zero-size element with thick borders
+   renders the triangle; a second, slightly larger triangle underneath
+   (::before, sitting 2-3px further out) peeks past the inner fill,
+   mimicking a 2px border on the bubble. The horizontal position uses
+   --tut-arrow-x (set inline by tutorial.ts, defaults to 50%) so the
+   arrow lines up with the spotlit element's centre — not just the
+   centre of the card. Without this, every off-centre target looks like
+   the arrow is floating awkwardly between target and card. */
+.tut-box::before,
+.tut-box::after {
+    display: none;
+}
+.tut-box.arrow-bottom::before,
+.tut-box.arrow-top::before {
+    content: "";
+    display: block;
+    position: absolute;
+    left: var(--tut-arrow-x, 50%);
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-style: solid;
+}
+.tut-box.arrow-bottom::after,
+.tut-box.arrow-top::after {
+    content: "";
+    display: block;
+    position: absolute;
+    left: var(--tut-arrow-x, 50%);
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-style: solid;
+}
+.tut-box.arrow-bottom::before {
+    /* outline (drawn under the inner triangle) */
+    bottom: -15px;
+    border-width: 13px 11px 0 11px;
+    border-color: var(--tut-accent) transparent transparent transparent;
+    filter: drop-shadow(0 0 6px var(--tut-accent-glow));
+}
+.tut-box.arrow-bottom::after {
+    /* inner fill */
+    bottom: -12px;
+    border-width: 12px 10px 0 10px;
+    border-color: var(--tut-card-bg) transparent transparent transparent;
+}
+.tut-box.arrow-top::before {
+    top: -15px;
+    border-width: 0 11px 13px 11px;
+    border-color: transparent transparent var(--tut-accent) transparent;
+    filter: drop-shadow(0 0 6px var(--tut-accent-glow));
+}
+.tut-box.arrow-top::after {
+    top: -12px;
+    border-width: 0 10px 12px 10px;
+    border-color: transparent transparent var(--tut-card-bg) transparent;
+}
+/* Character portrait box — hidden by tutorial.ts attach() when no
+   portraitUrl is configured. */
+.tut-char {
+    flex-shrink: 0;
+    width: 100px;
+    border: 1px solid var(--tut-portrait-border);
+    background: var(--tut-portrait-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.tut-char img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.tut-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+}
+.tut-text {
+    color: var(--tut-text-color);
+    font-size: 14px;
+    line-height: 1.45;
+}
+.tut-continue {
+    color: var(--tut-hint-color);
+    font-size: 11px;
+    text-align: right;
+    font-style: italic;
+}

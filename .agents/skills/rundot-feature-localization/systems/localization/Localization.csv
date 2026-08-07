@@ -1,0 +1,15 @@
+KEY,English,PortugueseBR,SpanishLA
+LanguageNativeName,English,Português (Brasil),Español (Latinoamérica)
+SettingsLanguage,LANGUAGE,IDIOMA,IDIOMA
+PopupLanguageTitle,LANGUAGE,IDIOMA,IDIOMA
+ButtonClose,[ CLOSE ],[ FECHAR ],[ CERRAR ]
+ButtonBack,◄ BACK,◄ VOLTAR,◄ ATRÁS
+MenuStartGame,START GAME,INICIAR JOGO,INICIAR JUEGO
+MenuSettings,SETTINGS,OPÇÕES,AJUSTES
+BannerWave,WAVE [n],ONDA [n],OLEADA [n]
+GameOverScore,Score: <b>[score]</b>,Pontuação: <b>[score]</b>,Puntuación: <b>[score]</b>
+ToastReward,"You earned [n] coins, nice!","Você ganhou [n] moedas, boa!","¡Ganaste [n] monedas, bien!"
+DialogQuitBody,Quit now?\nProgress this wave will be lost.,Sair agora?\nO progresso desta onda será perdido.,¿Salir ahora?\nEl progreso de esta oleada se perderá.
+DialogQuoteDemo,"He said ""hold the line"", and they did.","Ele disse ""segurem a linha"", e eles seguraram.","Dijo ""mantengan la línea"", y lo hicieron."
+NotificationTitle,Your base misses you!,Sua base sente sua falta!,¡Tu base te extraña!
+NotificationReEngagementBody,"The horde is regrouping — come back and hold the line, commander.","A horda está se reagrupando — volte e segure a linha, comandante.","La horda se está reagrupando — vuelve y mantén la línea, comandante."

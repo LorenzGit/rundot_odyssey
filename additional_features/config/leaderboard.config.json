@@ -1,0 +1,25 @@
+{
+  "requiresToken": true,
+  "enableScoreSealing": true,
+  "scoreOrder": "highest",
+  "minScore": 0,
+  "maxScore": 1000000,
+  "minDurationSec": 1,
+  "maxDurationSec": 86400,
+  "modes": {
+    "default": { "displayName": "Default" }
+  },
+  "periods": {
+    "alltime": { "displayName": "All Time", "type": "alltime" },
+    "weekly": { "displayName": "Weekly", "type": "weekly" }
+  },
+  "antiCheat": {
+    "enableRateLimit": true,
+    "enableZScoreDetection": true,
+    "minTimeBetweenSubmissionsSec": 10,
+    "zScoreThreshold": 5,
+    "trustScoreDecayPerFlag": 10,
+    "shadowBanThreshold": 20
+  },
+  "displaySettings": { "maxEntriesPerPage": 50 }
+}

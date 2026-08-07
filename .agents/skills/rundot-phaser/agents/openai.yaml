@@ -1,0 +1,4 @@
+interface:
+  display_name: "RUN Phaser"
+  short_description: "Build Phaser games for the RUN.world host"
+  default_prompt: "Use $rundot-phaser to build this Phaser feature for RUN.world."

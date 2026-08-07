@@ -1,0 +1,4 @@
+interface:
+  display_name: "Compress MP3 Audio"
+  short_description: "Shrink MP3 files safely for web games"
+  default_prompt: "Use $compress-mp3-audio to compress these MP3 files while preserving the originals."

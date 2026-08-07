@@ -1,0 +1,13 @@
+{
+  "rooms": [
+    {
+      "type": "template-demo-syncplay",
+      "deterministic": true,
+      "config": {
+        "maxPlayers": 4,
+        "allowReconnect": true,
+        "reconnectTimeout": 30
+      }
+    }
+  ]
+}

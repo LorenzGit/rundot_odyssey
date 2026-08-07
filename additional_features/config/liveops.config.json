@@ -1,0 +1,23 @@
+{
+  "client": {
+    "values": {
+      "runtime": {
+        "dailyRewardsEnabled": true,
+        "dailyQuestsEnabled": true,
+        "notificationDelaySeconds": 86400,
+        "monetization": { "adsEnabled": false, "shopEnabled": false }
+      }
+    },
+    "overrides": [],
+    "experiments": [
+      {
+        "id": "example-ui-copy-v1",
+        "variants": [
+          { "id": "control", "weight": 1, "values": {} },
+          { "id": "alternate", "weight": 1, "values": { "uiCopyVariant": "alternate" } }
+        ]
+      }
+    ]
+  },
+  "server": { "values": {}, "overrides": [] }
+}

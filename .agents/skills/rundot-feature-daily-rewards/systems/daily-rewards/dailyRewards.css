@@ -1,0 +1,238 @@
+/* DAILY REWARDS popup — tile grid + claim states + countdown.
+   Pairs with dailyRewards.html (markup) and dailyRewardsScreen.js (logic).
+
+   Theme: everything routes through the custom properties below, defaulted to
+   a neutral dark palette. ADAPT: override the variables in the host's own
+   stylesheet (fonts, colors, radii) instead of editing the rules — e.g.
+     #daily-rewards-dialog { --daily-accent: #00ff44; }
+   applies an optional CRT-green theme. */
+
+#daily-rewards-dialog {
+    /* ADAPT: theme variables — override these to match the host game. */
+    --daily-bg: #16181d; /* dialog panel background */
+    --daily-fg: #e8eaed; /* primary text */
+    --daily-muted: #9aa0a6; /* secondary text (day labels, wait copy) */
+    --daily-border: #3c4043; /* resting tile/panel borders */
+    --daily-accent: #4f9dff; /* claimable highlight + CTA copy */
+    --daily-accent-soft: rgba(79, 157, 255, 0.15);
+    --daily-milestone: #ffc94d; /* milestone tile frame/glow */
+    --daily-milestone-soft: rgba(255, 201, 77, 0.12);
+    --daily-backdrop: rgba(0, 0, 0, 0.72);
+
+    position: fixed;
+    inset: 0;
+    z-index: 220; /* ADAPT: above the host's menus */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#daily-rewards-dialog.hidden {
+    display: none;
+}
+#daily-rewards-dialog .daily-backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--daily-backdrop);
+}
+
+.daily-rewards-box {
+    position: relative;
+    background: var(--daily-bg);
+    border: 2px solid var(--daily-border);
+    border-radius: 8px;
+    padding: 22px 20px;
+    width: calc(100% - 32px);
+    max-width: 420px;
+    color: var(--daily-fg);
+}
+.daily-title {
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: var(--daily-fg);
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+/* Length-agnostic grid: regular rewards flow three-up; any def flagged
+   `milestone: true` spans the full row and renders bigger. Flag-driven spans
+   survive reward-track edits. */
+.daily-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.daily-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 6px;
+    min-height: 82px;
+    border: 1px solid var(--daily-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    text-align: center;
+    position: relative;
+}
+.daily-tile .day-lbl {
+    color: var(--daily-muted);
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+.daily-tile .day-icon {
+    font-size: 22px;
+    line-height: 1;
+    margin-bottom: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.daily-tile .day-amt {
+    color: var(--daily-fg);
+    font-size: 14px;
+    font-weight: bold;
+}
+.daily-tile .day-perm {
+    color: var(--daily-muted);
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-top: 2px;
+}
+
+/* Claimable tile: the single next reward the player can tap. Accent pulse
+   draws the eye; cursor signals the affordance. */
+.daily-tile.claimable {
+    border-color: var(--daily-accent);
+    background: var(--daily-accent-soft);
+    box-shadow: 0 0 10px var(--daily-accent-soft);
+    cursor: pointer;
+    animation: daily-pulse 2s infinite;
+}
+.daily-tile.claimable:active {
+    filter: brightness(1.25);
+}
+.daily-tile.claimable:focus-visible {
+    outline: 2px solid var(--daily-accent);
+    outline-offset: 2px;
+}
+@keyframes daily-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 6px var(--daily-accent-soft);
+    }
+    50% {
+        box-shadow: 0 0 16px var(--daily-accent);
+    }
+}
+
+/* Already-claimed tiles: dim + checkmark in the corner. */
+.daily-tile.claimed {
+    opacity: 0.45;
+}
+.daily-tile.claimed::after {
+    content: "\2713";
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    color: var(--daily-accent);
+    font-size: 14px;
+}
+
+/* Future (unreachable) tiles: very dim, no affordance. */
+.daily-tile.locked {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* Milestone tiles (def.milestone): full-width, extra padding, bigger text,
+   heavy accent frame. Keeps its glow when claimed but dims a little so it
+   doesn't compete with the next claimable tile. */
+.daily-tile.milestone {
+    grid-column: 1 / -1;
+    padding: 14px 12px;
+    min-height: 96px;
+    border-width: 2px;
+    border-color: var(--daily-milestone);
+    background: var(--daily-milestone-soft);
+}
+.daily-tile.milestone .day-lbl {
+    font-size: 13px;
+    color: var(--daily-milestone);
+}
+.daily-tile.milestone .day-icon {
+    font-size: 32px;
+}
+.daily-tile.milestone .day-amt {
+    font-size: 18px;
+}
+.daily-tile.milestone.claimable {
+    animation: daily-pulse-milestone 1.6s infinite;
+}
+@keyframes daily-pulse-milestone {
+    0%,
+    100% {
+        box-shadow: 0 0 10px var(--daily-milestone-soft);
+    }
+    50% {
+        box-shadow: 0 0 20px var(--daily-milestone);
+    }
+}
+.daily-tile.milestone.claimed {
+    opacity: 0.8;
+}
+.daily-tile.milestone.claimed::after {
+    color: var(--daily-milestone);
+    font-size: 18px;
+}
+
+/* Countdown row: three states — waiting (muted label + countdown value),
+   claimable (accent CTA copy, value hidden), finished (celebration copy,
+   value hidden). State classes toggled by dailyRewardsScreen.js. */
+.daily-countdown-row {
+    text-align: center;
+    margin-bottom: 14px;
+    font-size: 13px;
+}
+.daily-countdown-lbl {
+    color: var(--daily-muted);
+    letter-spacing: 1px;
+    margin-right: 6px;
+}
+.daily-countdown-val {
+    color: var(--daily-milestone);
+    font-weight: bold;
+}
+.daily-countdown-row.finished .daily-countdown-lbl {
+    color: var(--daily-milestone);
+}
+.daily-countdown-row.finished .daily-countdown-val {
+    display: none;
+}
+.daily-countdown-row.claimable .daily-countdown-lbl {
+    color: var(--daily-accent);
+    font-weight: bold;
+}
+
+.daily-close-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+/* ADAPT: swap .daily-close-btn styling for the host's standard button class. */
+.daily-close-btn {
+    white-space: nowrap;
+    font: inherit;
+    font-size: 16px;
+    padding: 10px 24px;
+    color: var(--daily-fg);
+    background: transparent;
+    border: 1px solid var(--daily-border);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.daily-close-btn:hover {
+    border-color: var(--daily-accent);
+}

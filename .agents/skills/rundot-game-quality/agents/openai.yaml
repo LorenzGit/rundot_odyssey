@@ -1,0 +1,4 @@
+interface:
+  display_name: "RUN.world Game Quality"
+  short_description: "Enforce visible versions and polished game quality"
+  default_prompt: "Use $rundot-game-quality to version this build and make the RUN.world game presentation-complete and release-ready."

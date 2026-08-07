@@ -1,0 +1,36 @@
+KEY,English,PortugueseBR,SpanishLA
+SettingsLanguage,LANGUAGE,IDIOMA,IDIOMA
+ButtonBack,BACK,VOLTAR,ATRÁS
+MenuStartGame,START GAME,INICIAR JOGO,INICIAR JUEGO
+MenuSettings,SETTINGS,OPÇÕES,AJUSTES
+MenuDailyRewards,DAILY REWARDS,RECOMPENSAS DIÁRIAS,RECOMPENSAS DIARIAS
+MenuDailyQuests,DAILY QUESTS,MISSÕES DIÁRIAS,MISIONES DIARIAS
+MenuShop,SHOP,LOJA,TIENDA
+MenuArrows,ARROWS,FLECHAS,FLECHAS
+MenuStats,STATS,ESTATÍSTICAS,ESTADÍSTICAS
+MenuRunFeatures,RUN FEATURES,RECURSOS RUN,FUNCIONES RUN
+MenuSubtitle,THREAD THE GATES. STRIKE THE BULLSEYE.,ATRAVESSE OS PORTÕES. ACERTE O ALVO.,ATRAVIESA LOS ANILLOS. DA EN EL CENTRO.
+SettingsMusic,MUSIC,MÚSICA,MÚSICA
+SettingsSfx,SOUND EFFECTS,EFEITOS SONOROS,EFECTOS DE SONIDO
+SettingsMusicVolume,MUSIC VOLUME,VOLUME DA MÚSICA,VOLUMEN DE MÚSICA
+SettingsSfxVolume,SFX VOLUME,VOLUME DOS EFEITOS,VOLUMEN DE EFECTOS
+SettingsHaptics,HAPTICS,VIBRAÇÃO,VIBRACIÓN
+SettingsNotifications,NOTIFICATIONS,NOTIFICAÇÕES,NOTIFICACIONES
+SettingsReducedMotion,REDUCED MOTION,MOVIMENTO REDUZIDO,MOVIMIENTO REDUCIDO
+SettingsQuality,QUALITY,QUALIDADE,CALIDAD
+SettingsHigh,HIGH,ALTA,ALTA
+SettingsLow,LOW,BAIXA,BAJA
+SettingsUnavailable,UNAVAILABLE OUTSIDE RUN HOST,INDISPONÍVEL FORA DO RUN,NO DISPONIBLE FUERA DE RUN
+DailyRewardsBody,Rewards unlock through trusted daily state.,Recompensas usam o estado diário confiável.,Las recompensas usan estado diario confiable.
+DailyQuestsBody,Quest claims require persisted verified progress.,As missões exigem progresso salvo e verificado.,Las misiones requieren progreso guardado y verificado.
+ShopBody,Live catalog pricing appears only in a supported RUN host.,Os preços reais aparecem apenas no RUN compatível.,Los precios reales aparecen solo en RUN compatible.
+StatsBody,Your Odyssey career so far.,Sua carreira em Odyssey até agora.,Tu carrera en Odyssey hasta ahora.
+ButtonPlay,PLAY,JOGAR,JUGAR
+NotificationTitle,The bow waits for you,O arco te espera,El arco te espera
+NotificationReEngagementBody,"Your daily drachmae are ready—draw the bow.","Seus dracmas diários estão prontos—puxe o arco.","Tus dracmas diarios están listos—tensa el arco."
+NotificationDay1Title,Your daily reward is ready,Sua recompensa diária está pronta,Tu recompensa diaria está lista
+NotificationDay1Body,Claim it now to start a streak.,Resgate agora para começar uma sequência.,Recláma ahora para empezar una racha.
+NotificationDay2Title,Your streak is still alive,Sua sequência continua viva,Tu racha sigue viva
+NotificationDay2Body,One round today keeps it going.,Uma rodada hoje mantém ela ativa.,Una ronda hoy la mantiene activa.
+NotificationDay3Title,The bullseye still waits,O alvo ainda espera,El centro aún espera
+NotificationDay3Body,Thread one more perfect shot today.,Faça mais um tiro perfeito hoje.,Haz un tiro más perfecto hoy.

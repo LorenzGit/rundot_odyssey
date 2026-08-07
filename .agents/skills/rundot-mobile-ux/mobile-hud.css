@@ -1,0 +1,88 @@
+/*
+ * Reference mobile HUD patterns for a RUN.game title. Copy the pieces you need
+ * into your stylesheet. Assumes --safe-* CSS vars are set (see safe-area.ts).
+ */
+
+/* App shell caps at the phone aspect and centers; the game composites inside it. */
+.app-container {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 9 / 16;
+    margin: 0 auto;
+    overflow: hidden;
+    touch-action: none; /* stop browser pan / zoom / double-tap-to-zoom on the game */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* HUD overlay sits above the canvas. Container ignores taps; children opt back in. */
+.hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    contain: content;
+}
+.hud > * {
+    pointer-events: auto;
+}
+
+/*
+ * Corner anchors — position relative to the safe area + a gutter, never to
+ * hardcoded pixel coordinates. These hold their place across any screen size.
+ */
+.hud-top-left {
+    position: absolute;
+    top: var(--safe-top, 0);
+    left: var(--safe-left, 0);
+    margin: 12px;
+}
+.hud-top-right {
+    position: absolute;
+    top: var(--safe-top, 0);
+    right: var(--safe-right, 0);
+    margin: 12px;
+}
+.hud-bottom-left {
+    position: absolute;
+    bottom: var(--safe-bottom, 0);
+    left: var(--safe-left, 0);
+    margin: 12px;
+}
+.hud-bottom-right {
+    position: absolute;
+    bottom: var(--safe-bottom, 0);
+    right: var(--safe-right, 0);
+    margin: 12px;
+}
+
+/* Touch targets never below 44x44px. Pad small icons with a transparent hit area. */
+.touch-target {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Scale type/icons with the viewport, clamped so they never get too small or huge. */
+:root {
+    --hud-font: clamp(14px, 4vw, 22px);
+    --hud-icon: clamp(28px, 8vw, 48px);
+}
+
+.hud-value {
+    font-size: var(--hud-font);
+    font-variant-numeric: tabular-nums; /* digits don't shift width as they change */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); /* readable over the 3D scene */
+}
+
+.hud-icon {
+    width: var(--hud-icon);
+    height: var(--hud-icon);
+}
+
+/* Press feedback for touch — :hover doesn't exist on phones. */
+.btn:active {
+    transform: scale(0.95);
+}

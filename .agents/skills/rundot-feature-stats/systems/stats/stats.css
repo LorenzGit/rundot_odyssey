@@ -1,0 +1,43 @@
+/* Stats screen rows — reference styling for statsScreen.ts.
+   Layout/typography ship as-is; colors are neutral custom properties so the
+   template inherits the host's theme until you opt in. To restyle, set the
+   variables on :root (or any ancestor of the list). Optional green-terminal
+   theme:
+
+   :root {
+       --stats-fg: #88aa88;
+       --stats-accent: #00ffcc;
+       --stats-divider: #00ff4415;
+       --stats-value-glow: 0 0 8px #00ffcc;
+   }
+*/
+
+.stat-section {
+    padding: 16px 16px 6px;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--stats-section-fg, var(--stats-accent, inherit));
+    opacity: 0.8;
+}
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--stats-divider, rgba(128, 128, 128, 0.2));
+}
+.stat-row:last-child {
+    border-bottom: none;
+}
+.stat-label {
+    color: var(--stats-fg, inherit);
+    font-size: 15px;
+}
+.stat-value {
+    color: var(--stats-accent, inherit);
+    font-size: 17px;
+    font-weight: bold;
+    text-shadow: var(--stats-value-glow, none);
+}

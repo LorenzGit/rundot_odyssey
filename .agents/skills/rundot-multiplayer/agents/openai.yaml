@@ -1,0 +1,4 @@
+interface:
+  display_name: "RUN Multiplayer"
+  short_description: "Build authoritative RUN.world multiplayer games"
+  default_prompt: "Use $rundot-multiplayer to design and implement this RUN.world multiplayer game safely."

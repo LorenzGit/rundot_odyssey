@@ -1,0 +1,227 @@
+/* DAILY QUESTS panel — header (countdown + tracker), quest rows with
+   progress bars and claim buttons, empty/locked states.
+   Pairs with dailyQuests.html (markup shell) and dailyQuestsScreen.ts (logic).
+
+   Theme: everything routes through the custom properties below, defaulted to
+   a neutral dark palette. ADAPT: override the variables in the host's own
+   stylesheet (fonts, colors, radii) instead of editing the rules — e.g.
+     #daily-quests-panel { --quests-accent: #00ff44; }
+   applies an optional CRT-green theme. Rendering into your own container
+   instead of dailyQuests.html? Put the .daily-quests class on it so the
+   variables (and the row styles below) resolve there. */
+
+#daily-quests-panel,
+.daily-quests {
+    /* ADAPT: theme variables — override these to match the host game. */
+    --quests-bg: #16181d; /* panel background */
+    --quests-fg: #e8eaed; /* primary text (quest descriptions) */
+    --quests-muted: #9aa0a6; /* secondary text (labels, progress) */
+    --quests-border: #3c4043; /* resting row/panel borders */
+    --quests-accent: #4f9dff; /* progress fill + countdown value */
+    --quests-accent-soft: rgba(79, 157, 255, 0.12);
+    --quests-claim: #ffc94d; /* claim-ready highlight: button, tracker, rewards */
+    --quests-claim-soft: rgba(255, 201, 77, 0.12);
+    --quests-backdrop: rgba(0, 0, 0, 0.72);
+}
+
+/* ── Panel shell (from dailyQuests.html; skip when the host has its own
+      screen system and hands the renderer a bare container) ─────────────── */
+#daily-quests-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 220; /* ADAPT: above the host's menus */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#daily-quests-panel.hidden {
+    display: none;
+}
+#daily-quests-panel .quests-backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--quests-backdrop);
+}
+
+.daily-quests-box {
+    position: relative;
+    background: var(--quests-bg);
+    border: 2px solid var(--quests-border);
+    border-radius: 8px;
+    padding: 22px 20px;
+    width: calc(100% - 32px);
+    max-width: 440px;
+    max-height: calc(100% - 48px);
+    display: flex;
+    flex-direction: column;
+    color: var(--quests-fg);
+}
+.quests-title {
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: var(--quests-fg);
+    text-align: center;
+    margin-bottom: 12px;
+}
+/* Rows scroll when a long quest list overflows a small screen. */
+.quest-list {
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+/* ── Header: countdown + claimed-today tracker ──────────────────────────── */
+.quest-header {
+    margin-bottom: 8px;
+}
+.quest-countdown {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.quest-countdown-lbl {
+    color: var(--quests-muted);
+    letter-spacing: 1px;
+    margin-right: 6px;
+}
+.quest-countdown-val {
+    color: var(--quests-accent);
+    font-weight: bold;
+    font-variant-numeric: tabular-nums; /* stops the ticking text jittering */
+}
+.quest-tracker {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--quests-claim);
+    border-radius: 6px;
+    background: var(--quests-claim-soft);
+}
+.quest-tracker-lbl {
+    color: var(--quests-claim);
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+.quest-tracker-val {
+    color: var(--quests-fg);
+    font-size: 17px;
+    font-weight: bold;
+}
+
+/* ── Quest rows ─────────────────────────────────────────────────────────── */
+.quest-item {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--quests-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+}
+/* Target met, reward unclaimed: warm frame draws the eye to the button. */
+.quest-item.can-claim {
+    border-color: var(--quests-claim);
+    background: var(--quests-claim-soft);
+}
+.quest-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+.quest-desc {
+    color: var(--quests-fg);
+    font-size: 15px;
+    font-weight: bold;
+}
+.quest-reward {
+    color: var(--quests-claim);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.quest-bar {
+    height: 6px;
+    margin: 8px 0;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--quests-border);
+    border-radius: 3px;
+}
+.quest-fill {
+    height: 100%;
+    max-width: 100%;
+    background: var(--quests-accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+.quest-item.can-claim .quest-fill {
+    background: var(--quests-claim);
+}
+
+.quest-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    min-height: 32px;
+}
+.quest-prog {
+    color: var(--quests-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ADAPT: swap .quest-claim styling for the host's standard button class if
+   it has one. */
+.quest-claim {
+    font: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 6px 16px;
+    color: var(--quests-claim);
+    background: transparent;
+    border: 1px solid var(--quests-claim);
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.quest-claim:hover {
+    background: var(--quests-claim-soft);
+}
+.quest-claim:active {
+    filter: brightness(1.25);
+}
+.quest-claim:focus-visible {
+    outline: 2px solid var(--quests-claim);
+    outline-offset: 2px;
+}
+
+/* Locked ("keep playing to unlock") and all-done states share one style. */
+.quest-empty {
+    color: var(--quests-muted);
+    text-align: center;
+    padding: 32px 16px;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+/* ── Close row (panel shell only) ───────────────────────────────────────── */
+.quests-close-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 12px;
+}
+/* ADAPT: swap for the host's standard button class. */
+.quests-close-btn {
+    white-space: nowrap;
+    font: inherit;
+    font-size: 16px;
+    padding: 10px 24px;
+    color: var(--quests-fg);
+    background: transparent;
+    border: 1px solid var(--quests-border);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.quests-close-btn:hover {
+    border-color: var(--quests-accent);
+}

@@ -1,0 +1,28 @@
+{
+  "recipes": {
+    "initialize_template_state": {
+      "duration": 0,
+      "scope": "player",
+      "clientViewable": false,
+      "inputs": {},
+      "outputs": {},
+      "beginEffects": [
+        { "type": "disable_recipe", "selector": "initialize_template_state" },
+        { "type": "set", "entity": "template_tokens", "value": 0 },
+        { "type": "set", "entity": "template_actions", "value": 0 }
+      ],
+      "metadata": { "displayName": "Initialize Template State" }
+    },
+    "complete_template_action": {
+      "duration": 0,
+      "scope": "player",
+      "clientViewable": true,
+      "inputs": {},
+      "outputs": {
+        "template_tokens": 1,
+        "template_actions": 1
+      },
+      "metadata": { "displayName": "Complete Template Action" }
+    }
+  }
+}

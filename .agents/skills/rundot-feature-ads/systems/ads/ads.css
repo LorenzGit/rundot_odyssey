@@ -1,0 +1,195 @@
+/* AD REWARDS ladder — header, watch button, sequential reward rows.
+   Pairs with adRewardsScreen.js (which renders into any container and adds
+   the .ads-ladder class itself).
+
+   Theme: everything routes through the custom properties below, defaulted to
+   a neutral dark palette. ADAPT: override the variables in the host's own
+   stylesheet (fonts, colors, radii) instead of editing the rules — e.g.
+     .ads-ladder { --ads-accent: #00ff44; }
+   applies an optional CRT-green theme. */
+
+.ads-ladder {
+    /* ADAPT: theme variables — override these to match the host game. */
+    --ads-fg: #e8eaed; /* primary text */
+    --ads-muted: #9aa0a6; /* secondary text (counts, locked rows) */
+    --ads-border: #3c4043; /* resting row borders */
+    --ads-accent: #4f9dff; /* active progress + watch button */
+    --ads-accent-soft: rgba(79, 157, 255, 0.15);
+    --ads-ready: #ffc94d; /* claimable glow + CLAIM button */
+    --ads-ready-soft: rgba(255, 201, 77, 0.12);
+    --ads-bar-bg: rgba(255, 255, 255, 0.08);
+
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--ads-fg);
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.ads-header {
+    text-align: center;
+    margin-bottom: 6px;
+}
+.ads-title {
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: var(--ads-fg);
+}
+.ads-total {
+    color: var(--ads-muted);
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+
+/* ── Watch row ─────────────────────────────────────────────────────────── */
+.ads-watch-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+/* ADAPT: swap for the host's standard button class if it has one. */
+.ads-watch-btn {
+    font: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    color: var(--ads-fg);
+    background: var(--ads-accent-soft);
+    border: 1px solid var(--ads-accent);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.ads-watch-btn:hover:not(:disabled) {
+    filter: brightness(1.2);
+}
+.ads-watch-btn:disabled {
+    color: var(--ads-muted);
+    background: transparent;
+    border-color: var(--ads-border);
+    cursor: default;
+}
+.ads-remaining {
+    color: var(--ads-muted);
+    font-size: 12px;
+}
+
+/* ── Reward rows ───────────────────────────────────────────────────────── */
+.ads-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--ads-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.ads-node-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.ads-node-title {
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: var(--ads-muted);
+    margin-bottom: 2px;
+}
+.ads-node-desc {
+    font-size: 14px;
+    color: var(--ads-fg);
+}
+
+/* Track column: fixed-ish width so bars/buttons align down the list. */
+.ads-track {
+    flex: 0 0 auto;
+    width: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Ready (earned, unclaimed): the row that wants attention. */
+.ads-node.ready {
+    border-color: var(--ads-ready);
+    background: var(--ads-ready-soft);
+    animation: ads-pulse 2s infinite;
+}
+@keyframes ads-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 6px var(--ads-ready-soft);
+    }
+    50% {
+        box-shadow: 0 0 14px var(--ads-ready);
+    }
+}
+.ads-claim-btn {
+    font: inherit;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding: 8px 18px;
+    width: 100%;
+    color: #1b1b1b;
+    background: var(--ads-ready);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.ads-claim-btn:hover {
+    filter: brightness(1.15);
+}
+.ads-claim-btn:active {
+    filter: brightness(1.3);
+}
+
+/* Claimed: dim, permanent history. */
+.ads-node.claimed {
+    opacity: 0.5;
+}
+.ads-node.claimed .ads-node-title {
+    color: var(--ads-ready);
+}
+.ads-claimed-lbl {
+    color: var(--ads-ready);
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* Active: the reward currently being worked toward — accent border + bar. */
+.ads-node.active {
+    border-color: var(--ads-accent);
+}
+.ads-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--ads-bar-bg);
+    border: 1px solid var(--ads-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.ads-fill {
+    height: 100%;
+    background: var(--ads-accent);
+    transition: width 0.3s ease;
+}
+.ads-node.active .ads-count {
+    color: var(--ads-fg);
+}
+.ads-count {
+    color: var(--ads-muted);
+    font-size: 12px;
+}
+
+/* Locked (future): very dim, requirement still visible. */
+.ads-node.locked {
+    opacity: 0.45;
+}

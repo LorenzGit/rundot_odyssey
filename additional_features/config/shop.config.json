@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "itemId": "REPLACE_WITH_RUN_SHOP_ITEM_ID",
+      "name": "Example Durable Cosmetic",
+      "description": "Replace this placeholder with a game-specific product.",
+      "category": "non_consumable",
+      "price": { "type": "bucks", "value": "100" },
+      "entitlements": [{ "entitlementId": "REPLACE_WITH_RUN_ENTITLEMENT_ID", "quantity": 1, "consumable": false }],
+      "assets": {},
+      "unique": true,
+      "active": false,
+      "regions": [],
+      "refundEligible": true,
+      "refundWindowHours": 24,
+      "tags": ["template-demo"],
+      "sortOrder": 1,
+      "releasedAt": null,
+      "expiresAt": null
+    }
+  ],
+  "sales": [],
+  "collections": []
+}

@@ -1,0 +1,30 @@
+<!--
+  Daily Rewards popup markup — paste into the host's index.html.
+
+  Placement: near the end of <body>, as a sibling of the game's other
+  overlays/dialogs (NOT inside a screen that gets hidden/cleared), so the
+  fixed-position dialog can sit above everything. Check that z-index 220 in
+  dailyRewards.css clears the host's topmost UI, and link dailyRewards.css
+  from the host's stylesheet bundle.
+
+  The .daily-grid stays empty here — dailyRewardsScreen.js fills it on open.
+  Wire the buttons yourself (see README step 4):
+    open:  await refreshServerTime(); openDailyRewards(dialogEl, dailyRewards, {...})
+    close: #daily-close click -> closeDailyRewards(dialogEl)
+-->
+<div id="daily-rewards-dialog" class="hidden">
+    <div class="daily-backdrop"></div>
+    <div class="daily-rewards-box">
+        <!-- ADAPT: title copy/localization -->
+        <div class="daily-title">DAILY REWARDS</div>
+        <div class="daily-grid"></div>
+        <div class="daily-countdown-row">
+            <span class="daily-countdown-lbl">Next reward in</span>
+            <span class="daily-countdown-val">--h--m</span>
+        </div>
+        <div class="daily-close-row">
+            <!-- ADAPT: reuse the host's standard button class if it has one -->
+            <button id="daily-close" class="daily-close-btn">CLOSE</button>
+        </div>
+    </div>
+</div>

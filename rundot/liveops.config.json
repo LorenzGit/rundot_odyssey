@@ -1,0 +1,15 @@
+{
+  "client": {
+    "values": {
+      "runtime": {
+        "dailyRewardsEnabled": true,
+        "dailyQuestsEnabled": true,
+        "notificationDelaySeconds": 86400,
+        "monetization": { "adsEnabled": true, "shopEnabled": true }
+      }
+    },
+    "overrides": [],
+    "experiments": []
+  },
+  "server": { "values": {}, "overrides": [] }
+}

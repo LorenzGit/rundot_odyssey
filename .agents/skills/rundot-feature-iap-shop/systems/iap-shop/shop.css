@@ -1,0 +1,220 @@
+/* Reference styling for systems/iap-shop's shopScreen.js.
+ *
+ * Theme is neutralized behind CSS custom properties with dark-UI fallbacks:
+ * override the --shop-* variables on :root (or any ancestor of the shop
+ * container) to match the host game — no rule edits needed for a reskin.
+ *
+ *   :root {
+ *     --shop-accent: #58e879;      // buy buttons, badges, highlights
+ *     --shop-bg: #12141a;          // screen background
+ *     --shop-card-bg: #1b1e26;     // card fill
+ *     --shop-border: #333846;      // card + section borders
+ *     --shop-text: #e8eaf0;        // primary text
+ *     --shop-text-dim: #9aa2b1;    // secondary text
+ *     --shop-ok: #39d353;          // owned checkmark
+ *     --shop-warn: #e8b339;        // limited-offer countdown, value badges
+ *     --shop-font: inherit;        // host game's UI font stack
+ *   }
+ */
+
+.shop {
+    background: var(--shop-bg, #12141a);
+    color: var(--shop-text, #e8eaf0);
+    font-family: var(--shop-font, inherit);
+    padding: 12px;
+    overflow-y: auto;
+}
+
+/* ── Balance header ─────────────────────────────────────────────────── */
+
+.shop-balance {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 4px 2px 10px;
+}
+
+/* ── Currency icon chip ─────────────────────────────────────────────────
+ * Text "RB" until the platform icon lands; applyCurrencyIcon injects an
+ * <img> plus a hidden text-fallback sibling. The sibling rule below is what
+ * makes the fallback reappear if the image errors out (broken <img>s render
+ * at 0 width, the span stays hidden only while the img element exists). */
+
+.rb-icon {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 700;
+    font-size: 0.85em;
+    letter-spacing: 0.02em;
+}
+
+.rb-icon img {
+    width: 1.1em;
+    height: 1.1em;
+    vertical-align: -0.2em;
+}
+
+.rb-icon img + span {
+    display: none;
+}
+
+/* ── Section headers ────────────────────────────────────────────────── */
+
+.shop-section-hdr {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--shop-text-dim, #9aa2b1);
+    border-bottom: 1px solid var(--shop-border, #333846);
+    padding: 14px 2px 4px;
+    margin-bottom: 10px;
+}
+
+/* ── Bundle cards (also reused by the subscription card) ────────────── */
+
+.shop-bundle {
+    position: relative; /* anchors the owned-check overlay */
+    background: var(--shop-card-bg, #1b1e26);
+    border: 1px solid var(--shop-border, #333846);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.shop-bundle.limited {
+    border-color: var(--shop-warn, #e8b339);
+}
+
+.shop-bundle.owned-one {
+    opacity: 0.75;
+}
+
+.shop-bundle-owned-check {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 40px;
+    line-height: 1;
+    color: var(--shop-ok, #39d353);
+    opacity: 0.9;
+    pointer-events: none; /* never intercept buy-button clicks */
+}
+
+.shop-bundle-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.shop-bundle-name {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.shop-bundle-time {
+    font-size: 12px;
+    color: var(--shop-warn, #e8b339);
+    white-space: nowrap;
+}
+
+.shop-bundle-perks {
+    margin: 8px 0 10px;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--shop-text-dim, #9aa2b1);
+}
+
+.shop-bundle-perks li {
+    margin: 2px 0;
+}
+
+.shop-bundle-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.shop-bundle-spacer {
+    flex: 1;
+}
+
+/* ── Buy buttons ────────────────────────────────────────────────────── */
+
+.shop-buy-btn,
+.shop-pack-buy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: var(--shop-accent, #58e879);
+    color: var(--shop-bg, #12141a);
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 8px 16px;
+    cursor: pointer;
+}
+
+.shop-buy-btn:disabled,
+.shop-pack-buy:disabled {
+    cursor: default;
+    opacity: 0.85;
+}
+
+.shop-buy-btn.owned-lbl {
+    background: transparent;
+    color: var(--shop-text-dim, #9aa2b1);
+    border: 1px solid var(--shop-border, #333846);
+}
+
+/* ── Pack grid ──────────────────────────────────────────────────────── */
+
+.shop-packs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.shop-pack {
+    position: relative; /* anchors the bonus badge */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: var(--shop-card-bg, #1b1e26);
+    border: 1px solid var(--shop-border, #333846);
+    border-radius: 8px;
+    padding: 16px 8px 10px;
+}
+
+.shop-pack-badge {
+    position: absolute;
+    top: -7px;
+    right: -5px;
+    background: var(--shop-warn, #e8b339);
+    color: var(--shop-bg, #12141a);
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 2px 7px;
+}
+
+.shop-pack-amount {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.shop-pack-buy {
+    width: 100%;
+    padding: 7px 4px;
+}
