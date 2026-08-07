@@ -3,11 +3,6 @@
   "relativePathToDistFolder": "dist",
   "usesPreloader": false,
   "orientation": "landscape",
-  "keywords": [
-    "archery",
-    "greek",
-    "skill",
-    "arcade"
-  ],
+  "keywords": ["archery", "greek", "skill", "arcade"],
   "kitId": null
 }

@@ -15,6 +15,7 @@ interface Snapshot {
     courseRect: { x: number; y: number; width: number; height: number };
     visibleRect: { x: number; y: number; width: number; height: number };
     arrowCount: number;
+    groundBottom: number;
     resultOverlayCount: number;
 }
 
@@ -589,3 +590,34 @@ test("threading a ring and hitting the target each sound and buzz", async ({ pag
         "hitting the target produced no haptic",
     ).toBe(true);
 });
+
+/**
+ * The ground haze is drawn in world units but has to reach the bottom of the
+ * FRAME, and the world scale changes with every course fit. A fixed world
+ * depth stopped short on shallower fits and ended at its strongest alpha in
+ * open air, stamping a hard bright bar across the painting a few pixels above
+ * the canvas edge — reported from a phone, invisible at the viewport this
+ * suite happened to use.
+ */
+for (const viewport of [
+    { width: 758, height: 460, name: "RUN host landscape" },
+    { width: 956, height: 440, name: "iPhone 17 Pro Max landscape" },
+    { width: 844, height: 390, name: "iPhone 12 landscape" },
+    { width: 1024, height: 512, name: "small tablet landscape" },
+    { width: 740, height: 360, name: "short landscape" },
+]) {
+    test(`the ground haze reaches the frame bottom on ${viewport.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await openReady(page);
+
+        for (const depth of [1, 8, 14, 20, 40]) {
+            await goToDepth(page, depth);
+            const { groundBottom } = await snapshot(page);
+            expect(
+                groundBottom,
+                `course ${depth}: the haze ends at design y ${Math.round(groundBottom)}, ` +
+                    `short of the ${DESIGN_HEIGHT}px frame — it will print a hard bar there`,
+            ).toBeGreaterThanOrEqual(DESIGN_HEIGHT);
+        }
+    });
+}

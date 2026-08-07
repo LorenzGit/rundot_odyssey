@@ -3,6 +3,7 @@ import {
     Container,
     Graphics,
     Rectangle,
+    Sprite,
     type Application,
     type FederatedPointerEvent,
     type Text,
@@ -50,7 +51,7 @@ import {
     type UiButton,
     type UlyssesView,
 } from "./art.ts";
-import { createScenery, type SceneryLayers } from "./scenery.ts";
+import { createScenery, verticalGradient, type SceneryLayers } from "./scenery.ts";
 import { ODYSSEY_ART, type UlyssesRig } from "./artAssets.ts";
 import ulyssesRigJson from "../assets/art/odyssey/ulysses-rig.json";
 import { formatNumber } from "./formatNumber.ts";
@@ -102,6 +103,8 @@ interface OdysseyQaSnapshot {
     arrowY: number;
     arrowVelocityY: number;
     windZones: { x: number; width: number; accelY: number; accelX: number }[];
+    /** Design-space y where the ground haze ends; must reach the frame bottom. */
+    groundBottom: number;
     aimAngle: number;
     power: number;
     resultOverlayCount: number;
@@ -160,6 +163,12 @@ const FIRE_MIN_HOLD_MS = 70;
 const PHYSICS_STEP = 1 / 120;
 /** Equal-tempered semitone, for walking the ring cue up a run. */
 const SEMITONE = 2 ** (1 / 12);
+/** Where the ground haze starts, in world units. */
+const GROUND_TOP = PLAY_BOTTOM - 40;
+/** Shortest the haze is ever drawn, before it is stretched to the frame edge. */
+const GROUND_MIN_DEPTH = 320;
+/** Extra world units past the frame edge, so rounding can never expose a gap. */
+const GROUND_OVERSHOOT = 80;
 /** Patron-only fletching colour — cosmetic, applied over any equipped shaft. */
 const MELTEMI_FLETCH = 0xf4f8ff;
 /** Never simulate more than this much real time in one frame (tab-switch guard). */
@@ -230,6 +239,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
     let resultOverlay: Container | null = null;
     let pauseOverlay: Container | null = null;
     let impactPulse: Graphics | null = null;
+    let courseGround: Sprite | null = null;
     let impactTime = 0;
     /** Delay defeat overlay so the stuck arrow is visible. */
     let defeatHold = 0;
@@ -468,6 +478,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         for (const child of world.removeChildren()) child.destroy({ children: true });
         for (const child of backdrop.removeChildren()) child.destroy({ children: true });
         gateViews = [];
+        courseGround = null;
         scenery = null;
         windArt = null;
         ulysses = null;
@@ -530,7 +541,8 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         scenery = createScenery(level, backgroundTexture);
         backdrop.addChild(scenery.root);
 
-        world.addChild(createCourseGround(level.scenery.ledgeColor, level.worldWidth));
+        courseGround = createCourseGround(level.scenery.ledgeColor, level.worldWidth);
+        world.addChild(courseGround);
         windArt = level.windZones ? createWindZoneArt(level.windZones) : null;
         if (windArt) world.addChild(windArt.root);
         for (const obstacle of level.obstacles) world.addChild(createObstacle(obstacle, propTextures));
@@ -658,22 +670,18 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
      * fading down from PLAY_BOTTOM gives obstacles and the target something to
      * stand on without stamping a hard UI-looking bar across the art.
      */
-    function createCourseGround(color: number, worldWidth: number): Graphics {
-        const g = new Graphics();
-        const bands = 26;
-        const depth = 320;
-        // Non-overlapping bands: a translucent stack that overlaps by a pixel
-        // double-composites and prints a seam on every boundary. There is
-        // deliberately no hard lip on top — a full-width bright line read as a
-        // stray UI rule laid over the painting rather than as ground.
-        for (let i = 0; i < bands; i += 1) {
-            const t = i / (bands - 1);
-            g.rect(-200, PLAY_BOTTOM - 40 + t * depth, worldWidth + 400, depth / bands + 0.75).fill({
-                color,
-                alpha: t * t * 0.6,
-            });
-        }
-        return g;
+    function createCourseGround(color: number, worldWidth: number): Sprite {
+        // One canvas gradient, not a stack of translucent rects: overlapping
+        // translucent bands double-composite and print a line at every
+        // boundary, which is the lesson already written into scenery.ts.
+        const ground = verticalGradient(worldWidth + 400, GROUND_MIN_DEPTH, [
+            { at: 0, color, alpha: 0 },
+            { at: 0.55, color, alpha: 0.18 },
+            { at: 1, color, alpha: 0.6 },
+        ]);
+        ground.label = "course-ground";
+        ground.position.set(-200, GROUND_TOP);
+        return ground;
     }
 
     /**
@@ -759,6 +767,15 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         // very top of the world still starts below the visible edge so a high
         // lob is not clipped by the frame.
         world.y = Math.max(crop.top, bottom - PLAY_BOTTOM * scale);
+        // The haze is drawn in world units but has to reach the bottom of the
+        // FRAME, and the world scale changes with every course. A fixed depth
+        // stopped short on shallower fits and ended at full strength in open
+        // air — a hard bright bar across the painting. Stretch it past the
+        // frame edge and let the stage mask do the cutting.
+        if (courseGround) {
+            const toFrameBottom = (DESIGN_HEIGHT - world.y) / scale - GROUND_TOP;
+            courseGround.height = Math.max(GROUND_MIN_DEPTH, toFrameBottom + GROUND_OVERSHOOT);
+        }
     }
 
     function drawTrajectory(): void {
@@ -1352,6 +1369,9 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 arrowX: shot?.position.x ?? 0,
                 arrowY: shot?.position.y ?? 0,
                 arrowVelocityY: shot?.velocity.y ?? 0,
+                groundBottom: courseGround
+                    ? world.y + (courseGround.y + courseGround.height) * world.scale.y
+                    : Number.NaN,
                 windZones: (level.windZones ?? []).map((zone) => ({
                     x: zone.x,
                     width: zone.width,

@@ -32,7 +32,7 @@ export function fitBackgroundCoverHeight(sprite: Sprite, destW: number, destH: n
     sprite.position.set((destW - tw * scale) / 2, (destH - th * scale) / 2);
 }
 
-interface GradientStop {
+export interface GradientStop {
     at: number;
     color: number;
     alpha: number;
@@ -51,7 +51,7 @@ function css(color: number, alpha: number): string {
  * translucent ones, printing a line across the sky at every band boundary.
  * A canvas gradient has no bands at all.
  */
-function verticalGradient(width: number, height: number, stops: readonly GradientStop[]): Sprite {
+export function verticalGradient(width: number, height: number, stops: readonly GradientStop[]): Sprite {
     const canvas = document.createElement("canvas");
     canvas.width = 1;
     canvas.height = 256;
