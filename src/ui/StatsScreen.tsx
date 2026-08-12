@@ -6,8 +6,9 @@ export default function StatsScreen() {
     const state = useStore((value) => value);
     const stats: Array<[string, number | string]> = [
         ["BEST SCORE", state.score],
+        ["DEEPEST COURSE", state.bestDepth],
+        ["COURSES CLEARED", state.totalCompletions],
         ["TOTAL PLAYS", state.totalPlays],
-        ["LEVEL", state.level],
         ["DRACHMAE", state.coins],
         ["ARROWS OWNED", state.ownedArrows.length],
         ["EQUIPPED", state.equippedArrow.toUpperCase()],

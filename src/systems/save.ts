@@ -36,8 +36,10 @@ export interface GameSaveV4 {
         | "coins"
         | "level"
         | "totalPlays"
+        | "totalCompletions"
         | "depth"
         | "bestDepth"
+        | "leaderboardSubmittedDepth"
         | "bestStars"
         | "ownedArrows"
         | "equippedArrow"
@@ -50,6 +52,7 @@ export interface GameSaveV4 {
         | "dailyQuestDay"
         | "dailyQuestProgress"
         | "dailyQuestClaimIds"
+        | "likePromptShown"
     >;
     /** Interrupted-checkout intent and the last authoritative ownership read */
     commerce: Pick<AppState, "pendingPurchaseIntent" | "ownedProductIds">;
@@ -178,8 +181,10 @@ function snapshot(): GameSaveV4 {
             coins: state.coins,
             level: state.level,
             totalPlays: state.totalPlays,
+            totalCompletions: state.totalCompletions,
             depth: state.depth,
             bestDepth: state.bestDepth,
+            leaderboardSubmittedDepth: state.leaderboardSubmittedDepth,
             bestStars: state.bestStars,
             ownedArrows: state.ownedArrows,
             equippedArrow: state.equippedArrow,
@@ -191,6 +196,7 @@ function snapshot(): GameSaveV4 {
             dailyQuestDay: state.dailyQuestDay,
             dailyQuestProgress: state.dailyQuestProgress,
             dailyQuestClaimIds: state.dailyQuestClaimIds,
+            likePromptShown: state.likePromptShown,
         },
         commerce: {
             pendingPurchaseIntent: state.pendingPurchaseIntent,
@@ -251,10 +257,18 @@ function migrate(raw: unknown): GameSaveV4 | null {
             coins: nonNegativeInteger(candidate.progress.coins),
             level: Math.max(1, nonNegativeInteger(candidate.progress.level, 1)),
             totalPlays: nonNegativeInteger(candidate.progress.totalPlays),
+            // Older saves predate a distinct completion counter. bestDepth is
+            // the honest lower bound and avoids replaying already-reached
+            // engagement steps after migration.
+            totalCompletions: nonNegativeInteger(
+                candidate.progress.totalCompletions,
+                nonNegativeInteger(candidate.progress.bestDepth),
+            ),
             // A save written before endless mode has no depth at all, which
             // correctly reads as "start at course one".
             depth: Math.max(1, nonNegativeInteger(candidate.progress.depth, 1)),
             bestDepth: nonNegativeInteger(candidate.progress.bestDepth),
+            leaderboardSubmittedDepth: nonNegativeInteger(candidate.progress.leaderboardSubmittedDepth),
             bestStars: Math.min(3, nonNegativeInteger(candidate.progress.bestStars)),
             ownedArrows,
             equippedArrow: equippedArrowOr(
@@ -281,6 +295,7 @@ function migrate(raw: unknown): GameSaveV4 | null {
                       )
                     : {},
             dailyQuestClaimIds: recentStrings(retention.dailyQuestClaimIds, 180),
+            likePromptShown: booleanOr(retention.likePromptShown, false),
         },
         commerce: {
             pendingPurchaseIntent: pendingIntentOrNull(commerce.pendingPurchaseIntent),

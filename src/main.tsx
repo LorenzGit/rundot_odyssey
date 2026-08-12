@@ -8,11 +8,12 @@ import {
     getRunCapabilities,
     initSdk,
     readAttribution,
+    refreshRunCapabilities,
     registerLifecycles,
     requestHostExit,
 } from "./sdk/runSdk.ts";
 import { analytics } from "./systems/analytics/analyticsConfig.ts";
-import { resolveReturnLaunch, returnReminders } from "./systems/retention/retentionConfig.ts";
+import { resolveReturnLaunch } from "./systems/retention/retentionConfig.ts";
 import { warmAssets } from "./assets/preload.ts";
 import { saveSystem } from "./systems/save.ts";
 import { restoreLocale } from "./systems/localization.ts";
@@ -118,20 +119,24 @@ async function boot() {
         },
         onResume: () => {
             setHostPaused("host_pause", false);
+            runtimeServices.resume();
         },
         onSleep: () => {
             setHostPaused("host_sleep", true);
             void saveSystem.flush();
-            void returnReminders.refreshPrimary();
             analytics.sessionPause();
         },
         onAwake: () => {
+            // onAwake is the SDK's "refresh stale data" hook: re-read host
+            // capabilities so a long suspend can't leave a boot-time snapshot
+            // gating features for the rest of the session.
+            refreshRunCapabilities();
             setHostPaused("host_sleep", false);
+            runtimeServices.resume();
             void reconcileCommerce();
         },
         onQuit: () => {
             void saveSystem.flush();
-            void returnReminders.refreshPrimary();
             analytics.sessionEnd();
         },
         onIdentityChanged: (event) => {
@@ -144,6 +149,7 @@ async function boot() {
                 abandonOdysseyRun("menu_exit");
                 resumeFromHostPause();
                 store.patch({ phase: "menu", menuScreen: "main" });
+                runtimeServices.rearmNotifications();
                 void saveSystem.flush();
             } else if (state.menuScreen !== "main") {
                 store.patch({ menuScreen: "main" });

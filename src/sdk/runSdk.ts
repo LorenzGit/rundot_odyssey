@@ -28,6 +28,8 @@ export interface RunCapabilities {
     ads: boolean;
     purchases: boolean;
     subscriptions: boolean;
+    leaderboard: boolean;
+    popups: boolean;
 }
 
 const OFFLINE_CAPABILITIES: RunCapabilities = {
@@ -41,12 +43,31 @@ const OFFLINE_CAPABILITIES: RunCapabilities = {
     ads: false,
     purchases: false,
     subscriptions: false,
+    leaderboard: false,
+    popups: false,
 };
 
 let capabilities: RunCapabilities = OFFLINE_CAPABILITIES;
 
 function sdkNamespace(name: string): boolean {
     return typeof (RundotGameAPI as unknown as Record<string, unknown>)[name] === "object";
+}
+
+/**
+ * PITFALL: there is NO runtime RundotGameAPI.haptics namespace (the HapticsApi
+ * interface in the .d.ts is types-only). Support comes from DeviceInfo, and the
+ * trigger lives on the API root. Read LIVE at every call site that acts on it:
+ * `enabled` reflects the player's system setting, which can change mid-session,
+ * and a cached false at boot must never gate a later action.
+ */
+function hapticsAvailableNow(): boolean {
+    if (!_ready) return false;
+    try {
+        const device = RundotGameAPI.system.getDevice();
+        return device?.haptics?.supported === true && device?.haptics?.enabled === true;
+    } catch {
+        return false;
+    }
 }
 
 function snapshotCapabilities(): RunCapabilities {
@@ -59,24 +80,26 @@ function snapshotCapabilities(): RunCapabilities {
         analytics: sdkNamespace("analytics"),
         liveops: sdkNamespace("liveops"),
         notifications: sdkNamespace("notifications"),
-        // PITFALL: there is NO runtime RundotGameAPI.haptics namespace (the
-        // HapticsApi interface in the .d.ts is types-only). Support comes
-        // from DeviceInfo, and the trigger lives on the API root.
-        haptics: (() => {
-            try {
-                const device = RundotGameAPI.system.getDevice();
-                return device?.haptics?.supported === true && device?.haptics?.enabled === true;
-            } catch {
-                return false;
-            }
-        })(),
+        haptics: hapticsAvailableNow(),
         ads: environment?.ads === true,
         purchases: environment?.purchases === true,
         subscriptions: environment?.subscriptions === true,
+        leaderboard: sdkNamespace("leaderboard"),
+        popups: sdkNamespace("popups"),
     };
 }
 
 export function getRunCapabilities(): Readonly<RunCapabilities> {
+    return capabilities;
+}
+
+/**
+ * Re-read host capabilities. Wired to onAwake (the SDK's "refresh stale data"
+ * hook) so a session that started before a grant or attach does not stay
+ * frozen on its boot snapshot.
+ */
+export function refreshRunCapabilities(): Readonly<RunCapabilities> {
+    capabilities = snapshotCapabilities();
     return capabilities;
 }
 
@@ -199,8 +222,32 @@ export async function initSdk(): Promise<boolean> {
     capabilities = snapshotCapabilities();
     if (!_ready) {
         console.info("[runSdk] RUN host unavailable; using local non-authoritative fallbacks");
+        // Inside an iframe the host is expected — a cold WebView can simply be
+        // slower than the bounded handshake. Keep watching so a late attach
+        // upgrades this session instead of stranding it offline until relaunch.
+        if (embedded) watchForLateHostAttach();
     }
     return _ready;
+}
+
+function watchForLateHostAttach(): void {
+    const deadline = performance.now() + 30_000;
+    const watcher = window.setInterval(() => {
+        try {
+            if (RundotGameAPI.isAvailable() || RundotGameAPI.isMock()) {
+                window.clearInterval(watcher);
+                _ready = true;
+                capabilities = snapshotCapabilities();
+                applyRunSafeArea();
+                console.info("[runSdk] RUN host attached after the boot handshake; capabilities refreshed");
+                return;
+            }
+        } catch {
+            window.clearInterval(watcher);
+            return;
+        }
+        if (performance.now() >= deadline) window.clearInterval(watcher);
+    }, 500);
 }
 
 export async function readAppStorage(key: string): Promise<{ ok: boolean; value: string | null }> {
@@ -262,7 +309,9 @@ export async function setNotificationPreference(enabled: boolean): Promise<Notif
 export type HapticStyle = "light" | "medium" | "heavy" | "success" | "warning" | "error";
 
 export async function triggerHaptic(style: HapticStyle): Promise<boolean> {
-    if (capabilities.haptics) {
+    // Live read, not the boot snapshot: the player can toggle system haptics
+    // mid-session, and a cached false must never gate a later action.
+    if (hapticsAvailableNow()) {
         try {
             const map: Record<HapticStyle, HapticFeedbackStyle> = {
                 light: HapticFeedbackStyle.Light,
@@ -347,6 +396,70 @@ export async function recordFunnelStep(step: number, name: string, funnel: strin
         return true;
     } catch {
         return false;
+    }
+}
+
+export type LeaderboardSubmission =
+    | { status: "ranked"; rank: number | null }
+    | { status: "not_improved"; reason: string | null; rank: null }
+    | { status: "unavailable" | "failed"; rank: null };
+
+/** Submit the deterministic career depth to RUN's keep-best all-time board. */
+export async function submitCareerDepth(input: {
+    depth: number;
+    durationSeconds: number;
+    stars: number;
+    score: number;
+}): Promise<LeaderboardSubmission> {
+    if (!capabilities.leaderboard) return { status: "unavailable", rank: null };
+    try {
+        const result = await withTimeout(
+            RundotGameAPI.leaderboard.submitScore({
+                score: Math.max(1, Math.floor(input.depth)),
+                // SDK 5.24 validates 10..3600 locally before the host sees the
+                // configured board. Keep fast first courses and long-idle
+                // courses inside that public contract.
+                duration: Math.max(10, Math.min(3_600, Math.ceil(input.durationSeconds))),
+                period: "alltime",
+                metadata: {
+                    course: Math.max(1, Math.floor(input.depth)),
+                    stars: Math.max(1, Math.min(3, Math.floor(input.stars))),
+                    shot_score: Math.max(0, Math.floor(input.score)),
+                },
+            }),
+            5_000,
+            "leaderboard.submitScore",
+        );
+        return result.accepted
+            ? { status: "ranked", rank: typeof result.rank === "number" ? result.rank : null }
+            : { status: "not_improved", reason: result.reason ?? null, rank: null };
+    } catch (error) {
+        console.warn("[runSdk] leaderboard submission failed", error);
+        return { status: "failed", rank: null };
+    }
+}
+
+export type LikePromptOutcome = "liked" | "dismissed" | "already_liked" | "unavailable" | "failed";
+
+/** Ask once, after a satisfying achievement, using only platform-owned UI. */
+export async function showContextualLikePrompt(): Promise<LikePromptOutcome> {
+    if (!capabilities.popups) return "unavailable";
+    try {
+        const state = await withTimeout(RundotGameAPI.popups.getLikeState(), 2_000, "popups.getLikeState");
+        if (state.isLiked) return "already_liked";
+        const capability = await withTimeout(
+            RundotGameAPI.popups.canShowLikeDialog(),
+            2_000,
+            "popups.canShowLikeDialog",
+        );
+        if (!capability.available) return "unavailable";
+        // This is player-mediated UI; do not time it out while the player acts.
+        const result = await withHostOverlay(() => RundotGameAPI.popups.showLikeDialog());
+        if (!result.shown) return "unavailable";
+        return result.liked ? "liked" : "dismissed";
+    } catch (error) {
+        console.warn("[runSdk] Like prompt failed", error);
+        return "failed";
     }
 }
 

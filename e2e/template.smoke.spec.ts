@@ -15,10 +15,19 @@ interface Snapshot {
     courseRect: { x: number; y: number; width: number; height: number };
     visibleRect: { x: number; y: number; width: number; height: number };
     arrowCount: number;
+    arrowVelocityX: number;
+    arrowVelocityY: number;
     groundBottom: number;
     simTime: number;
     gateCenters: number[];
     resultOverlayCount: number;
+    buttonTextFit: Array<{
+        label: string;
+        textWidth: number;
+        textHeight: number;
+        faceWidth: number;
+        faceHeight: number;
+    }>;
 }
 
 declare global {
@@ -55,6 +64,16 @@ async function snapshot(page: Page): Promise<Snapshot> {
         return window.__odysseyQa.snapshot();
     });
 }
+
+test("a stalled critical painting cannot trap the player on loading", async ({ page }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    await page.route(/level-1.*\.png/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 13_000));
+        await route.continue();
+    });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 20_000 });
+});
 
 /** Jump to a depth with a shaft that can survive it. */
 async function goToDepth(page: Page, depth: number): Promise<void> {
@@ -327,12 +346,18 @@ test("wind measurably pushes the arrow, and the preview stops at the gust", asyn
         qa.setAim(par.angle);
         qa.setPower(par.power);
         qa.fire();
-        const out: { x: number; y: number; vy: number; t: number }[] = [];
+        const out: { x: number; y: number; vx: number; vy: number; t: number }[] = [];
         const start = performance.now();
         for (let i = 0; i < 400; i += 1) {
             const state = qa.snapshot();
             if (state.gameState === "Arrow Flying") {
-                out.push({ x: state.arrowX, y: state.arrowY, vy: state.arrowVelocityY, t: performance.now() - start });
+                out.push({
+                    x: state.arrowX,
+                    y: state.arrowY,
+                    vx: state.arrowVelocityX,
+                    vy: state.arrowVelocityY,
+                    t: performance.now() - start,
+                });
             } else if (out.length > 0) {
                 break;
             }
@@ -365,19 +390,14 @@ test("wind measurably pushes the arrow, and the preview stops at the gust", asyn
     // The gust has to turn the arrow enough to read as a change of direction,
     // and it competes with gravity, which is already bending the path — so
     // measure the heading change across the band and require it to be steep.
-    const heading = (a: (typeof samples)[number], b: (typeof samples)[number]) =>
-        (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
     let steepestBend = 0;
     for (const zone of zones) {
         const inside = samples.filter((s) => s.x >= zone.x && s.x <= zone.x + zone.width);
         if (inside.length < 4) continue;
-        // Compare the widest pair of headings anywhere in the band, not just
-        // the first and last adjacent pairs. Under load rAF sampling goes
-        // sparse, and a single adjacent pair straddling most of the band
-        // already contains the bend it is supposed to measure — which read as
-        // a shallower turn and made this assertion flaky rather than wrong.
-        const headings: number[] = [];
-        for (let i = 1; i < inside.length; i += 1) headings.push(heading(inside[i - 1]!, inside[i]!));
+        // The sprite rotates from instantaneous velocity, so measure that exact
+        // player-visible heading. Segment headings average across two rAF
+        // samples and lose part of the turn when the browser is under load.
+        const headings = inside.map((sample) => (Math.atan2(sample.vy, sample.vx) * 180) / Math.PI);
         steepestBend = Math.max(steepestBend, Math.max(...headings) - Math.min(...headings));
     }
     expect(
@@ -428,6 +448,119 @@ test("the shop sells the real Run Bits catalog and invents no price", async ({ p
     await expect(buttons.first()).toBeDisabled();
 });
 
+test("buying an arrow emits the standard economy sink", async ({ page }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    const analyticsLogs: string[] = [];
+    page.on("console", (message) => {
+        if (message.type() === "debug") analyticsLogs.push(message.text());
+    });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => window.__gameQa?.seedProgress(1, 500));
+    await page.getByRole("button", { name: /^arrows/i }).click();
+    await page.locator(".arrow-row").filter({ hasText: "BRONZE" }).getByRole("button", { name: "BUY" }).click();
+
+    await expect
+        .poll(() =>
+            page.evaluate(() => JSON.parse(localStorage.getItem("odyssey-perfect-shot-save") ?? "{}")?.progress?.coins),
+        )
+        .toBe(100);
+    expect(analyticsLogs.some((entry) => entry.includes("currency_spend"))).toBe(true);
+    expect(analyticsLogs.some((entry) => entry.includes("arrow_unlock"))).toBe(true);
+});
+
+test("notification opt-in fails closed outside the RUN host", async ({ page }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: /^settings$/i }).click();
+    const notifications = page.locator(".setting-row").filter({ hasText: "NOTIFICATIONS" });
+    await notifications.scrollIntoViewIfNeeded();
+    const notificationButton = notifications.locator("button");
+    await expect(notificationButton).toHaveText("ASK");
+    await notificationButton.click();
+    await page.waitForTimeout(100);
+    await expect(notificationButton).toHaveText("ASK");
+});
+
+test("all localized menu text stays inside its UI bounds on a short phone", async ({ page }) => {
+    await page.setViewportSize({ width: 667, height: 375 });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => window.__gameQa?.seedProgress(12, 1_450));
+
+    const locales = ["English", "PortugueseBR", "SpanishLA"] as const;
+    const screens = ["main", "daily-rewards", "daily-quests", "shop", "arrows", "stats", "settings"] as const;
+    for (const locale of locales) {
+        for (const screen of screens) {
+            await page.evaluate(
+                async ({ locale: nextLocale, screen: nextScreen }) => {
+                    await window.__gameQa?.setSetting("locale", nextLocale);
+                    window.__gameQa?.openScreen(nextScreen);
+                },
+                { locale, screen },
+            );
+            await expect.poll(() => page.evaluate(() => window.__gameQa?.snapshot().menuScreen)).toBe(screen);
+
+            const failures = await page.evaluate(() => {
+                const visible = (element: Element) => {
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return (
+                        style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0
+                    );
+                };
+                const failures: string[] = [];
+                const selector = "button,h1,h2,h3,p,span,strong,small,label,select";
+                for (const element of document.querySelectorAll<HTMLElement>(selector)) {
+                    if (!visible(element) || !(element.textContent?.trim() ?? "")) continue;
+                    const style = getComputedStyle(element);
+                    const pseudo = getComputedStyle(element, "::after");
+                    const fontSize = Number.parseFloat(style.fontSize);
+                    const pseudoText =
+                        pseudo.content !== "none" && pseudo.content !== "normal" && pseudo.content !== '""';
+                    if (fontSize > 0 && fontSize < 10) {
+                        failures.push(`${element.className || element.tagName}: ${fontSize}px text`);
+                    } else if (fontSize === 0 && pseudoText && Number.parseFloat(pseudo.fontSize) < 10) {
+                        failures.push(`${element.className || element.tagName}: ${pseudo.fontSize} pseudo text`);
+                    }
+
+                    const visualContainer =
+                        element.closest<HTMLElement>(
+                            "button,.menu-card,.run-depth,.subscreen-header,.reward-day,.quest-card,.shop-card,.arrow-row,.setting-row,.stats-grid article,.toast",
+                        ) ?? element;
+                    const bounds = visualContainer.getBoundingClientRect();
+                    for (const node of element.childNodes) {
+                        if (node.nodeType !== Node.TEXT_NODE || !(node.textContent?.trim() ?? "")) continue;
+                        const range = document.createRange();
+                        range.selectNode(node);
+                        const textRect = range.getBoundingClientRect();
+                        if (
+                            textRect.width > 0 &&
+                            (textRect.left < bounds.left - 2 ||
+                                textRect.right > bounds.right + 2 ||
+                                textRect.top < bounds.top - 2 ||
+                                textRect.bottom > bounds.bottom + 2)
+                        ) {
+                            failures.push(`${element.className || element.tagName}: text escaped its UI container`);
+                        }
+                    }
+                }
+
+                for (const row of document.querySelectorAll<HTMLElement>(".quest-card > div")) {
+                    const label = row.querySelector("strong")?.getBoundingClientRect();
+                    const progress = row.querySelector("span")?.getBoundingClientRect();
+                    if (label && progress && label.right > progress.left - 8) {
+                        failures.push("quest label collides with progress");
+                    }
+                }
+                return failures;
+            });
+            expect(failures, `${locale} ${screen}`).toEqual([]);
+        }
+    }
+});
+
 /**
  * Design-space centre of the results bounty button.
  *
@@ -450,6 +583,45 @@ async function clearCourseOne(page: Page): Promise<void> {
     }, level.parShot);
     await expect.poll(async () => (await snapshot(page)).gameState, { timeout: 20_000 }).toBe("Victory");
 }
+
+test("the first clear has one dominant continuation and starts course two", async ({ page }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    await openReady(page);
+    await clearCourseOne(page);
+
+    const before = await page.evaluate(() => window.__gameQa?.snapshot());
+    expect(before?.totalPlays).toBe(1);
+    expect(before?.totalCompletions).toBe(1);
+    await expect
+        .poll(async () => (await page.evaluate(() => window.__gameQa?.snapshot()))?.leaderboardSubmittedDepth)
+        .toBe(1);
+
+    const frame = (await snapshot(page)).visibleRect;
+    const panelH = Math.min(700, frame.height - 36);
+    const top = frame.y + frame.height / 2 - panelH / 2;
+    await clickStagePoint(page, DESIGN_WIDTH / 2, top + panelH * 0.89);
+
+    await expect.poll(async () => (await snapshot(page)).levelIndex).toBe(1);
+    const after = await page.evaluate(() => window.__gameQa?.snapshot());
+    expect(after?.totalPlays).toBe(2);
+    expect(after?.totalCompletions).toBe(1);
+    expect(after?.depth).toBe(2);
+});
+
+test("the reminder offer wraps completely inside its result button", async ({ page }) => {
+    await page.setViewportSize({ width: 667, height: 375 });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => window.__gameQa?.seedProgress(2, 500));
+    await page.getByRole("button", { name: /^(play|continue)$/i }).click();
+    await page.waitForFunction(() => window.odysseyReady === true);
+    await clearCourseOne(page);
+
+    const reminder = (await snapshot(page)).buttonTextFit.find((entry) => entry.label.includes("REMIND ME"));
+    expect(reminder, "the eligible result did not show the reminder offer").toBeDefined();
+    expect(reminder!.textWidth).toBeLessThanOrEqual(reminder!.faceWidth - 24);
+    expect(reminder!.textHeight).toBeLessThanOrEqual(reminder!.faceHeight - 16);
+});
 
 /** Drachmae the save has actually banked — the payout's authoritative record. */
 async function bankedDrachmae(page: Page): Promise<number> {

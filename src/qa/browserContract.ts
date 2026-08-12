@@ -17,6 +17,7 @@ import { rendererLifecycleSnapshot } from "../rendering/rendererLifecycle.ts";
 import { setHostPaused } from "../systems/hostPause.ts";
 import { saveSystem } from "../systems/save.ts";
 import { localDayKey, serverNow } from "../systems/serverTime.ts";
+import { selectLocale } from "../systems/localization.ts";
 
 interface HitTestReport {
     tag: string;
@@ -79,6 +80,10 @@ export function installBrowserQaContract(): void {
                 coins: state.coins,
                 level: state.level,
                 totalPlays: state.totalPlays,
+                totalCompletions: state.totalCompletions,
+                depth: state.depth,
+                bestDepth: state.bestDepth,
+                leaderboardSubmittedDepth: state.leaderboardSubmittedDepth,
                 renderer: document.documentElement.dataset.renderer ?? "pending",
                 rendererLifecycle: rendererLifecycleSnapshot(),
                 host: getRunCapabilities().host,
@@ -141,6 +146,11 @@ export function installBrowserQaContract(): void {
             return measured;
         },
         async setSetting(key, value) {
+            if (key === "locale") {
+                selectLocale(String(value));
+                await saveSystem.flush();
+                return;
+            }
             store.patch({ [key]: value } as Partial<AppState>);
             // Mirror the DOM side effects SettingsScreen/boot apply for these keys.
             if (key === "reducedMotion") document.documentElement.dataset.reducedMotion = String(value === true);
@@ -154,6 +164,7 @@ export function installBrowserQaContract(): void {
             store.patch({
                 coins,
                 totalPlays: Math.max(state.totalPlays, plays),
+                totalCompletions: Math.max(state.totalCompletions, plays),
                 level: Math.max(state.level, Math.floor(plays / 3) + 1),
                 score: Math.max(state.score, plays * 150),
                 // A mid-streak player: yesterday claimed, today still open.

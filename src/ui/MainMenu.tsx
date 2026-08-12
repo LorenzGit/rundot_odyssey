@@ -3,8 +3,6 @@ import { ARROWS, getArrow, loadArrowProgress } from "../game/arrows.ts";
 import { featureIntroducedAt, requiredMightAt } from "../game/levelGenerator.ts";
 import { endlessState, restartFromStart } from "../game/progression.ts";
 import { formatNumber, t } from "../systems/localization.ts";
-import { dailySystems } from "../systems/dailySystems.ts";
-import { startOdysseyRun } from "../systems/runAnalytics.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
 import { saveSystem } from "../systems/save.ts";
 import { store, useStore, type MenuScreen } from "../state/store.ts";
@@ -69,11 +67,10 @@ const MOTE_SLOTS = Array.from({ length: 14 }, (_, i) => ({
 
 function enterRun(): void {
     const depth = endlessState().depth;
-    runtimeServices.funnel(2, "run_started", "odyssey_first_play", 1);
-    store.patch({ phase: "playing", score: 0, totalPlays: store.get().totalPlays + 1, level: depth });
-    startOdysseyRun(depth);
-    dailySystems.recordQuestProgress("plays");
-    void saveSystem.flush();
+    // Step 2 is emitted only after Pixi has actually built the course. Keeping
+    // the tap and the successful start separate makes load failures visible.
+    runtimeServices.funnel(1, "play_tapped", "odyssey_first_play", 1);
+    store.patch({ phase: "playing", score: 0, level: depth });
 }
 
 /** What the next few courses will throw at the player, for the teaser line. */

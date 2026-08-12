@@ -596,6 +596,7 @@ export interface UiButton {
 
 export function createButton(label: string, width: number, onPress: () => void, color = GOLD): UiButton {
     const root = new Container();
+    root.label = "ui-button";
     const height = 92;
     const isGold = color === GOLD || color === 0xf0b429 || color === 0xffc129;
     const rim = isGold ? GOLD_DARK : 0x0a2a44;
@@ -612,16 +613,26 @@ export function createButton(label: string, width: number, onPress: () => void, 
         .fill(color)
         .roundRect(-width / 2 + 10, -height / 2 + 8, width - 20, 18, 8)
         .fill({ color: highlight, alpha: isGold ? 0.35 : 0.18 });
+    face.label = "ui-button-face";
     const text = new Text({
         text: label,
         style: {
             fontFamily: UI_SANS,
-            fontSize: 32,
+            // Two lines still render above the 10px effective floor on the
+            // smallest supported 667x375 landscape viewport. Shared wrapping
+            // prevents long contextual labels from escaping their button.
+            fontSize: 30,
             fontWeight: "800",
             fill: labelFill,
             letterSpacing: 1,
+            align: "center",
+            breakWords: true,
+            lineHeight: 31,
+            wordWrap: true,
+            wordWrapWidth: width - 32,
         },
     });
+    text.label = "ui-button-label";
     text.anchor.set(0.5);
     text.y = -1;
     root.addChild(shadow, face, text);

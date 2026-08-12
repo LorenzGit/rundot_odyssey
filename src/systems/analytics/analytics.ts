@@ -53,8 +53,14 @@ export interface FunnelDefinition {
 export interface AnalyticsConfig {
     /** Record a custom event. Wire this to the game's own SDK wrapper. */
     emitEvent: (name: string, payload: EventProps) => void;
-    /** Record a funnel step. Wire this to the game's own SDK wrapper. */
-    emitFunnelStep: (step: number, name: string, funnel: string, order: number) => void;
+    /**
+     * Record a funnel step. Wire this to the game's own SDK wrapper. May
+     * return whether delivery succeeded; on an `onceEver` funnel the lifetime
+     * mark is only persisted once delivery is confirmed (a void return counts
+     * as delivered), so a transient RPC failure can retry on a later beat
+     * instead of silently losing the step for the player's lifetime.
+     */
+    emitFunnelStep: (step: number, name: string, funnel: string, order: number) => void | boolean | Promise<boolean>;
     /**
      * Funnel declarations: name -> { order, steps, onceEver }. Declare every
      * funnel here — never rename or renumber a step that has shipped, or the
@@ -81,6 +87,8 @@ export interface AnalyticsConfig {
 export interface Analytics {
     /** Emit a custom event with enrich() context merged UNDER `props`. */
     event(name: string, props?: EventProps): void;
+    /** Record a post-transaction soft-currency sink. */
+    spend(currency: string, amount: number, sink: string, itemId?: string, balanceAfter?: number): void;
     /**
      * Fire step `step` (1-based) of a declared funnel. Undeclared funnels and
      * out-of-range steps silently no-op. On an `onceEver` funnel the step is
@@ -173,17 +181,25 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
         return marks;
     }
 
-    /** Returns true if `mark` was newly recorded, false if it already existed. */
-    function markOnce(mark: string): boolean {
+    /** Returns true if `mark` was newly held in memory, false if it existed. */
+    function holdMark(mark: string): boolean {
         const current = readMarks();
         if (current.has(mark)) return false;
         current.add(mark);
+        return true;
+    }
+
+    function persistMarks(): void {
         try {
-            localStorage.setItem(marksKey, JSON.stringify([...current]));
+            localStorage.setItem(marksKey, JSON.stringify([...readMarks()]));
         } catch {
             // quota / private mode: the in-memory set still dedups this session
         }
-        return true;
+    }
+
+    /** Undo a held mark after a failed delivery so a later beat can retry. */
+    function releaseMark(mark: string): void {
+        readMarks().delete(mark);
     }
 
     function isOff(name: string): boolean {
@@ -226,19 +242,39 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
             safeEmitEvent(name, payload);
         },
 
+        spend(currency, amount, sink, itemId = "", balanceAfter) {
+            if (isOff("currency_spend") || isOff(`currency_spend_${currency}`)) return;
+            system.event("currency_spend", {
+                currency,
+                amount: Math.max(0, Math.round(amount)),
+                sink,
+                item_id: itemId,
+                balance_after: balanceAfter === undefined ? undefined : Math.max(0, Math.round(balanceAfter)),
+            });
+        },
+
         funnelStep(funnel, step, props) {
             if (isOff(funnel)) return;
             const definition = funnels[funnel];
             const name = definition?.steps[step - 1];
             if (!name) return;
-            if (definition.onceEver && !markOnce(`${funnel}:${step}:${name}`)) return;
+            const onceMark = definition.onceEver ? `${funnel}:${step}:${name}` : null;
+            if (onceMark && !holdMark(onceMark)) return;
             log("funnel", funnel, step, name);
             const order = definition.order ?? 0;
             deliver(() => {
                 try {
-                    emitFunnelStep(step, name, funnel, order);
+                    const result = emitFunnelStep(step, name, funnel, order);
+                    if (!onceMark) return;
+                    void Promise.resolve(result)
+                        .then((ok) => {
+                            if (ok === false) releaseMark(onceMark);
+                            else persistMarks();
+                        })
+                        .catch(() => releaseMark(onceMark));
                 } catch {
                     // never let a funnel step break the beat that triggered it
+                    if (onceMark) releaseMark(onceMark);
                 }
             });
             // trackFunnelStep carries no payload, so context rides on a

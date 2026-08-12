@@ -834,7 +834,10 @@ expect(
     app.includes("TOAST_AUTO_HIDE_MS = 4_000") &&
         app.includes("window.setTimeout") &&
         app.includes("window.clearTimeout") &&
-        app.includes("store.get().toast === toast"),
+        // The timer guard must key on toastSeq, not the toast TEXT: two
+        // identical messages in a row compare equal, so a text guard lets the
+        // first timer dismiss the second toast almost immediately.
+        app.includes("store.get().toastSeq === seq"),
     "in-game toasts must auto-hide safely without an older timer clearing a replacement",
 );
 expect(

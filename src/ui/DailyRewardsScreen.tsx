@@ -27,26 +27,43 @@ export default function DailyRewardsScreen() {
     };
 
     return (
-        <MenuScreenLayout title={t("MenuDailyRewards")} kicker="RETURN LOOP">
+        <MenuScreenLayout
+            title={t("MenuDailyRewards")}
+            kicker="RETURN LOOP"
+            actions={
+                <button
+                    type="button"
+                    className="claim-action"
+                    disabled={busy || !view.ready || view.claimed}
+                    onClick={() => void claim()}
+                >
+                    {busy
+                        ? "SAVING..."
+                        : view.claimed
+                          ? "CLAIMED TODAY"
+                          : `CLAIM ${formatNumber(view.reward)} DRACHMAE`}
+                </button>
+            }
+        >
             <p className="screen-copy">{t("DailyRewardsBody")}</p>
             <p className="authority-label">{view.label}</p>
             <div className="reward-track">
                 {REWARDS.map((coins, index) => (
-                    <div className={`reward-day ${view.streak === index + 1 ? "current" : ""}`} key={coins}>
+                    <div
+                        // The reward index wraps modulo the track, so streaks past
+                        // day 7 must highlight by the wrapped position — a straight
+                        // `streak === index + 1` goes dark from day 8 onward.
+                        className={`reward-day ${
+                            view.streak > 0 && (view.streak - 1) % REWARDS.length === index ? "current" : ""
+                        }`}
+                        key={coins}
+                    >
                         <span>DAY {formatNumber(index + 1)}</span>
                         <strong>{formatNumber(coins)}</strong>
                         <small>ΔΡ</small>
                     </div>
                 ))}
             </div>
-            <button
-                type="button"
-                className="claim-action"
-                disabled={busy || !view.ready || view.claimed}
-                onClick={() => void claim()}
-            >
-                {busy ? "SAVING..." : view.claimed ? "CLAIMED TODAY" : `CLAIM ${formatNumber(view.reward)} DRACHMAE`}
-            </button>
             <p className="safety-note">
                 Local-browser claims persist for development but are never presented as RUN-authoritative.
             </p>

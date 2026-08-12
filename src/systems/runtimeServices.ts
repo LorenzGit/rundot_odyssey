@@ -19,15 +19,16 @@ import { returnReminders } from "./retention/retentionConfig.ts";
 export interface RuntimeConfig {
     dailyRewardsEnabled: boolean;
     dailyQuestsEnabled: boolean;
-    notificationDelaySeconds: number;
     adsEnabled: boolean;
     shopEnabled: boolean;
 }
 
+// The return-reminder cadence is deliberately NOT remoteable: it is fixed at
+// 24/48/72h in returnReminders. A parsed-but-unused delay knob sat here for
+// a while and misled LiveOps operators into "tuning" a value nothing read.
 const DEFAULTS: Readonly<RuntimeConfig> = Object.freeze({
     dailyRewardsEnabled: true,
     dailyQuestsEnabled: true,
-    notificationDelaySeconds: 86_400,
     adsEnabled: false,
     shopEnabled: false,
 });
@@ -51,11 +52,9 @@ function normalize(values: Record<string, unknown>): RuntimeConfig {
         root.monetization && typeof root.monetization === "object"
             ? (root.monetization as Record<string, unknown>)
             : {};
-    const delay = Number(root.notificationDelaySeconds);
     return {
         dailyRewardsEnabled: typeof root.dailyRewardsEnabled === "boolean" ? root.dailyRewardsEnabled : true,
         dailyQuestsEnabled: typeof root.dailyQuestsEnabled === "boolean" ? root.dailyQuestsEnabled : true,
-        notificationDelaySeconds: Number.isFinite(delay) ? Math.max(3_600, Math.min(delay, 604_800)) : 86_400,
         adsEnabled: monetization.adsEnabled === true && isConfiguredPlatformId(PLATFORM_IDS.rewardedResultsBonus),
         // The gate is the catalog as a whole: if the durable's ids are not
         // configured the deploy never registered `rundot/shop.config.json`,
@@ -72,8 +71,14 @@ async function refreshLiveOps(): Promise<void> {
     clearScheduledRefresh();
     const snapshot = await fetchLiveOps();
     if (!snapshot) {
-        config = { ...DEFAULTS };
-        store.patch({ runtimeReady: true, runtimeConfigVersion: null });
+        // KEEP the live config on a failed fetch: resetting to DEFAULTS here
+        // yanked an enabled shop/ads surface for the rest of the session on a
+        // single resume-time network blip. Retry only where a host could
+        // actually answer — without the capability this null is permanent.
+        store.patch({ runtimeReady: true });
+        if (getRunCapabilities().liveops) {
+            nextRefreshTimer = window.setTimeout(() => startRefreshCycle(), 60_000);
+        }
         return;
     }
     config = normalize(snapshot.values);

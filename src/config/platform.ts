@@ -13,11 +13,10 @@
  *
  * `REPLACE_WITH_*` values fail closed: `isConfiguredPlatformId` returns false
  * and the surface stays hidden rather than offering something that cannot
- * complete. Only `gameId` is still a placeholder — `rundot init` fills it in
- * when the game is first created remotely.
+ * complete.
  */
 export const PLATFORM_IDS = Object.freeze({
-    gameId: "REPLACE_WITH_RUN_GAME_ID",
+    gameId: "5XviCkzjeRsHvxeH55wu",
 
     // ------------------------------------------------------------ rewarded ads
     /** Victory results: double the drachmae the cleared course just paid. */

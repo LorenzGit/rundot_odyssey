@@ -69,8 +69,20 @@ import { PATRONAGE_EARNINGS_MULTIPLIER } from "../config/platform.ts";
 import { ownsPatronage } from "../systems/monetization/commerce.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
 import { dailySystems } from "../systems/dailySystems.ts";
-import { abandonOdysseyRun, completeOdysseyRun, recordOdysseyShot } from "../systems/runAnalytics.ts";
+import {
+    abandonOdysseyRun,
+    completeOdysseyRun,
+    recordOdysseyShot,
+    restartOdysseyRun,
+    startOdysseyRun,
+} from "../systems/runAnalytics.ts";
 import { saveSystem } from "../systems/save.ts";
+import {
+    getRunCapabilities,
+    setNotificationPreference,
+    showContextualLikePrompt,
+    submitCareerDepth,
+} from "../sdk/runSdk.ts";
 
 export interface Scene {
     destroy(): void;
@@ -101,6 +113,7 @@ interface OdysseyQaSnapshot {
     arrowCount: number;
     arrowX: number;
     arrowY: number;
+    arrowVelocityX: number;
     arrowVelocityY: number;
     windZones: { x: number; width: number; accelY: number; accelX: number }[];
     /** Design-space y where the ground haze ends; must reach the frame bottom. */
@@ -112,6 +125,13 @@ interface OdysseyQaSnapshot {
     aimAngle: number;
     power: number;
     resultOverlayCount: number;
+    buttonTextFit: Array<{
+        label: string;
+        textWidth: number;
+        textHeight: number;
+        faceWidth: number;
+        faceHeight: number;
+    }>;
 }
 
 interface OdysseyQaApi {
@@ -260,6 +280,9 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
     let resultEarned = 0;
     let resultBounty = 0;
     let resultBountyClaimed = false;
+    let resultIsCareerBest = false;
+    let resultLeaderboardDepth = 0;
+    let resultJourneyText: Text | null = null;
 
     /**
      * The shaft in the player's hand right now.
@@ -386,6 +409,8 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
             // Award drachmae for shop + career counters
             if (shot) {
                 const stars = starRating(shot, level);
+                const clearedCourse = level.depth;
+                const previousBestDepth = store.get().bestDepth;
                 const base = scoreToCoins(shot.score, stars);
                 const patron = ownsPatronage();
                 // The Patronage pays 25% more on every clear and banks the
@@ -401,12 +426,56 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 store.patch({ score: best, coins: arrowProgress.coins });
                 // Clearing banks the depth and arms the next course.
                 clearedDepth = advanceDepth(stars);
+                resultIsCareerBest = clearedCourse > previousBestDepth;
+                resultLeaderboardDepth =
+                    store.get().bestDepth > store.get().leaderboardSubmittedDepth ? store.get().bestDepth : 0;
                 dailySystems.recordQuestProgress("bounces");
                 dailySystems.recordQuestProgress("coins", payout);
                 completeOdysseyRun(shot.score, stars);
                 void saveSystem.flush();
             }
             showResult(true);
+            runtimeServices.rearmNotifications();
+            if (shot && resultLeaderboardDepth > 0) {
+                const journeyText = resultJourneyText;
+                const leaderboardDepth = resultLeaderboardDepth;
+                const isNewCareerBest = resultIsCareerBest;
+                const stars = starRating(shot, level);
+                const score = shot.score;
+                void submitCareerDepth({ depth: leaderboardDepth, durationSeconds: levelTime, stars, score }).then(
+                    (submission) => {
+                        runtimeServices.track("leaderboard_submit_result", {
+                            status: submission.status,
+                            course: leaderboardDepth,
+                            rank: submission.rank,
+                        });
+                        if (submission.status === "ranked" || submission.status === "not_improved") {
+                            store.patch({
+                                leaderboardSubmittedDepth: Math.max(
+                                    store.get().leaderboardSubmittedDepth,
+                                    leaderboardDepth,
+                                ),
+                            });
+                            void saveSystem.flush();
+                        }
+                        if (journeyText !== resultJourneyText || !journeyText) return;
+                        journeyText.text =
+                            submission.status === "ranked" && submission.rank
+                                ? `${isNewCareerBest ? "NEW " : ""}VOYAGE BEST · RANK #${formatNumber(submission.rank)}`
+                                : `VOYAGE BEST · COURSE ${formatNumber(leaderboardDepth)}`;
+                    },
+                );
+            }
+            if (shot && !store.get().likePromptShown && store.get().totalCompletions >= 3) {
+                const promptCourse = level.depth;
+                void showContextualLikePrompt().then((outcome) => {
+                    runtimeServices.track("like_prompt_result", { outcome, course: promptCourse });
+                    if (outcome === "liked" || outcome === "dismissed" || outcome === "already_liked") {
+                        store.patch({ likePromptShown: true });
+                        void saveSystem.flush();
+                    }
+                });
+            }
             publishState();
         },
         onBounce(point: { x: number; y: number }, _obstacleId: string, bouncesLeft: number) {
@@ -456,6 +525,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 particleEmitter?.burst(px, py, { style: "defeat", hue: 210, burst: 18 });
                 showResult(false, reason);
             }
+            runtimeServices.rearmNotifications();
             publishState();
         },
     };
@@ -508,16 +578,30 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
     function exitToMenu(reason: "menu_exit"): void {
         abandonOdysseyRun(reason);
         store.patch({ phase: "menu", menuScreen: "main" });
+        runtimeServices.rearmNotifications();
         void saveSystem.flush();
     }
 
-    function loadLevel(nextDepth?: number): void {
+    function loadLevel(nextDepth?: number, kind: "start" | "restart" = "start"): void {
         if (nextDepth !== undefined) store.patch({ depth: Math.max(1, Math.floor(nextDepth)) });
         // Re-read the wallet and inventory: a purchase made between courses
         // must be in hand for this one.
         arrowProgress = loadArrowProgress();
         level = currentLevel();
+        if (kind === "start") {
+            const totalPlays = store.get().totalPlays + 1;
+            store.patch({ totalPlays, level: level.depth });
+            startOdysseyRun(level.depth);
+            runtimeServices.funnel(2, "run_started", "odyssey_first_play", 1);
+            dailySystems.recordQuestProgress("plays");
+            void saveSystem.flush();
+        } else {
+            restartOdysseyRun();
+        }
         clearedDepth = 0;
+        resultIsCareerBest = false;
+        resultLeaderboardDepth = 0;
+        resultJourneyText = null;
         resultOverlay = destroyOverlay(resultOverlay);
         pauseOverlay = destroyOverlay(pauseOverlay);
         clearWorld();
@@ -1002,6 +1086,46 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         });
     }
 
+    /** Offer reminders only after a win, when their value is concrete. */
+    function attachReminderOffer(overlay: Container, cx: number, y: number, panelH: number): boolean {
+        const state = store.get();
+        if (
+            panelH < 580 ||
+            !getRunCapabilities().notifications ||
+            state.totalCompletions < 2 ||
+            state.notificationsEnabled ||
+            state.notificationsConsent !== "unknown"
+        )
+            return false;
+        const reminder = createButton(
+            "REMIND ME · DAILY REWARD",
+            380,
+            () => {
+                reminder.setEnabled(false);
+                void setNotificationPreference(true).then((result) => {
+                    runtimeServices.track("retention_notification_opt_in_result", { result, course: level.depth });
+                    if (result === "enabled") {
+                        store.patch({ notificationsEnabled: true, notificationsConsent: "granted" });
+                        void saveSystem.flush();
+                        runtimeServices.rearmNotifications();
+                        reminder.root.visible = false;
+                        store.patch({ toast: "RETURN REMINDERS ARMED" });
+                        return;
+                    }
+                    reminder.setEnabled(true);
+                    store.patch({
+                        toast: result === "unavailable" ? "REMINDERS UNAVAILABLE" : "REMINDER REQUEST FAILED",
+                    });
+                });
+            },
+            0x1f7db8,
+        );
+        reminder.root.position.set(cx + 230, y);
+        overlay.addChild(reminder.root);
+        runtimeServices.track("retention_notification_offer_shown", { course: level.depth });
+        return true;
+    }
+
     function showResult(victory: boolean, reason: DefeatReason | null = null): void {
         pauseButton.visible = false;
         setHudVisible(false);
@@ -1058,7 +1182,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
 
             const arrowDef = getArrow((shot.arrowId as ArrowId) ?? "reed");
             const targetPts = targetScoreForHit(quality, arrowDef.targetScoreMult);
-            const chipY = row(0.46);
+            const chipY = row(0.48);
             const gatesChip = createStatChip(
                 "RINGS",
                 `${formatNumber(shot.collectedCount)}/${formatNumber(level.gates.length)}`,
@@ -1101,20 +1225,37 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
             overlay.addChild(coinLine);
 
             const nextFeature = featureIntroducedAt(clearedDepth);
-            if (nextFeature) {
-                const teaser = outlinedText(`NEXT: ${nextFeature}`, 24, 0x8ef0a8);
-                teaser.anchor.set(0.5);
-                teaser.position.set(cx, row(0.365));
-                overlay.addChild(teaser);
+            const journey = outlinedText(
+                resultLeaderboardDepth > 0
+                    ? `${resultIsCareerBest ? "NEW " : ""}VOYAGE BEST · RANKING COURSE ${formatNumber(resultLeaderboardDepth)}…`
+                    : nextFeature
+                      ? `NEXT: ${nextFeature}`
+                      : `COURSE ${formatNumber(clearedDepth)} AWAITS`,
+                24,
+                0x8ef0a8,
+            );
+            journey.anchor.set(0.5);
+            journey.position.set(cx, row(0.365));
+            resultJourneyText = journey;
+            overlay.addChild(journey);
+
+            const reminderOffered = attachReminderOffer(overlay, cx, row(0.89) - 150, panelH);
+            if (!reminderOffered) attachResultsBounty(overlay, cx, row(0.89) - 150, panelH, coinLine);
+
+            const next = createButton(
+                `NEXT · COURSE ${formatNumber(clearedDepth)}`,
+                level.depth === 1 ? 440 : 360,
+                () => loadLevel(clearedDepth),
+            );
+            next.root.position.set(level.depth === 1 ? cx : cx + 185, row(0.89));
+            overlay.addChild(next.root);
+            // Course one's completion cliff was 92.6%. Give that first success
+            // one unambiguous continuation instead of an equal-weight replay.
+            if (level.depth > 1) {
+                const replay = createButton("REPLAY", 250, () => loadLevel(level.depth), 0x1f7db8);
+                replay.root.position.set(cx - 185, row(0.89));
+                overlay.addChild(replay.root);
             }
-
-            attachResultsBounty(overlay, cx, row(0.89) - 150, panelH, coinLine);
-
-            const replay = createButton("REPLAY", 250, () => loadLevel(level.depth), 0x1f7db8);
-            replay.root.position.set(cx - 175, row(0.89));
-            const next = createButton(`COURSE ${formatNumber(clearedDepth)}`, 340, () => loadLevel(clearedDepth));
-            next.root.position.set(cx + 175, row(0.89));
-            overlay.addChild(replay.root, next.root);
         } else {
             const arrowDef = equippedArrow();
             const reasonText =
@@ -1143,7 +1284,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
             );
             tip.anchor.set(0.5);
             tip.position.set(cx, row(0.44));
-            const retry = createButton("RETRY", 280, () => loadLevel());
+            const retry = createButton("RETRY", 280, () => loadLevel(undefined, "restart"));
             retry.root.position.set(cx - 165, row(0.75));
             const menu = createButton("MENU", 240, () => exitToMenu("menu_exit"), 0x3a5a78);
             menu.root.position.set(cx + 165, row(0.75));
@@ -1189,7 +1330,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         title.position.set(frame.cx, row(0.14));
         const resume = createButton("RESUME", 320, () => setPaused(false));
         resume.root.position.set(frame.cx, row(0.4));
-        const restart = createButton("RESTART", 320, () => loadLevel(), 0x1f7db8);
+        const restart = createButton("RESTART", 320, () => loadLevel(undefined, "restart"), 0x1f7db8);
         restart.root.position.set(frame.cx, row(0.62));
         // Leave the canvas shell — React owns the product main menu.
         const menu = createButton("MENU", 320, () => exitToMenu("menu_exit"), 0x3a5a78);
@@ -1341,8 +1482,8 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
     app.ticker.add(update);
     // React MainMenu owns the product shell. Entering the canvas starts a run
     // at the saved career level (1-based) instead of a second Pixi title screen.
-    const careerLevel = Math.max(1, store.get().level);
-    loadLevel(careerLevel - 1);
+    const careerLevel = Math.max(1, store.get().depth);
+    loadLevel(careerLevel);
 
     // Development-only: this contract can aim, fire and skip courses, so it must
     // never exist in a shipped build.
@@ -1379,6 +1520,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 // rather than re-simulating it and hoping the two agree.
                 arrowX: shot?.position.x ?? 0,
                 arrowY: shot?.position.y ?? 0,
+                arrowVelocityX: shot?.velocity.x ?? 0,
                 arrowVelocityY: shot?.velocity.y ?? 0,
                 simTime: gameState === "Arrow Flying" && shot ? shot.startTime + shot.elapsed : levelTime,
                 gateCenters: gateViews.map((view) => view.root.y),
@@ -1394,6 +1536,29 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 aimAngle: aimDisplay,
                 power: powerDisplay,
                 resultOverlayCount: ui.children.filter((child) => child.label === "result-overlay").length,
+                buttonTextFit: (() => {
+                    const entries: OdysseyQaSnapshot["buttonTextFit"] = [];
+                    const visit = (container: Container) => {
+                        for (const child of container.children) {
+                            if (child.label === "ui-button" && child instanceof Container) {
+                                const face = child.children.find((item) => item.label === "ui-button-face");
+                                const label = child.children.find((item) => item.label === "ui-button-label");
+                                if (face && label) {
+                                    entries.push({
+                                        label: String((label as Text).text),
+                                        textWidth: label.width,
+                                        textHeight: label.height,
+                                        faceWidth: face.width,
+                                        faceHeight: face.height,
+                                    });
+                                }
+                            }
+                            if (child instanceof Container) visit(child);
+                        }
+                    };
+                    visit(ui);
+                    return entries;
+                })(),
             }),
             setAim,
             setPower,
@@ -1406,7 +1571,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                     fire();
                 }
             },
-            retry: () => loadLevel(),
+            retry: () => loadLevel(undefined, "restart"),
             nextLevel: () => loadLevel(level.depth + 1),
             goToLevel: (index) => loadLevel(index + 1),
             pause: () => setPaused(true),

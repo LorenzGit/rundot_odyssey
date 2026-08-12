@@ -1,0 +1,23 @@
+{
+  "requiresToken": false,
+  "enableScoreSealing": false,
+  "scoreOrder": "highest",
+  "minScore": 1,
+  "maxScore": 1000000,
+  "minDurationSec": 10,
+  "maxDurationSec": 3600,
+  "periods": {
+    "alltime": { "displayName": "Deepest Odyssey", "type": "alltime" },
+    "daily": { "displayName": "Daily Odyssey", "type": "daily" }
+  },
+  "antiCheat": {
+    "enableRateLimit": true,
+    "enableZScoreDetection": false,
+    "minTimeBetweenSubmissionsSec": 15,
+    "trustScoreDecayPerFlag": 10,
+    "shadowBanThreshold": 20
+  },
+  "displaySettings": {
+    "maxEntriesPerPage": 50
+  }
+}

@@ -34,10 +34,14 @@ export interface AppState {
     coins: number;
     level: number;
     totalPlays: number;
+    /** Completed courses, independent from starts/retries; drives the engagement funnel. */
+    totalCompletions: number;
     /** Endless course the player is on (1-based). */
     depth: number;
     /** Deepest course ever cleared — the number the menu brags about. */
     bestDepth: number;
+    /** Deepest career score confirmed submitted (or already held) by RUN. */
+    leaderboardSubmittedDepth: number;
     /** Best star rating earned on any course. */
     bestStars: number;
     /** Buyable arrow shafts (persisted with save, not a separate localStorage key) */
@@ -58,6 +62,12 @@ export interface AppState {
 
     /** One-time toasts surfaced from systems/purchases/tutorials */
     toast: string | null;
+    /**
+     * Bumped every time a toast is SET. The auto-hide timer compares this, not
+     * the text: setting the same message twice leaves the selected string
+     * equal, React skips the re-render, and the first timer kills the second.
+     */
+    toastSeq: number;
 
     /** Commerce state mirrored from save */
     pendingPurchaseIntent: PendingPurchaseIntentSnapshot | null;
@@ -71,6 +81,8 @@ export interface AppState {
     dailyQuestDay: string | null;
     dailyQuestProgress: Record<string, number>;
     dailyQuestClaimIds: string[];
+    /** True only after the host actually displayed Odyssey's one-time Like prompt. */
+    likePromptShown: boolean;
     runtimeReady: boolean;
     runtimeConfigVersion: string | null;
     trustedTimeReady: boolean;
@@ -88,8 +100,10 @@ let state: AppState = {
     coins: 0,
     level: 1,
     totalPlays: 0,
+    totalCompletions: 0,
     depth: 1,
     bestDepth: 0,
+    leaderboardSubmittedDepth: 0,
     bestStars: 0,
     ownedArrows: ["reed"],
     equippedArrow: "reed",
@@ -109,6 +123,7 @@ let state: AppState = {
     quality: "high",
 
     toast: null,
+    toastSeq: 0,
     pendingPurchaseIntent: null,
     ownedProductIds: [],
     dailyRewardLastClaimDay: null,
@@ -117,6 +132,7 @@ let state: AppState = {
     dailyQuestDay: null,
     dailyQuestProgress: {},
     dailyQuestClaimIds: [],
+    likePromptShown: false,
     runtimeReady: false,
     runtimeConfigVersion: null,
     trustedTimeReady: false,
@@ -128,7 +144,12 @@ export const store = {
     },
 
     patch(partial: Partial<AppState>): void {
-        state = { ...state, ...partial };
+        // Stamp toastSeq whenever a toast is set so every producer gets the
+        // repeat-safe behavior without changing its call site.
+        state =
+            typeof partial.toast === "string"
+                ? { ...state, ...partial, toastSeq: state.toastSeq + 1 }
+                : { ...state, ...partial };
         for (const l of listeners) l();
     },
 

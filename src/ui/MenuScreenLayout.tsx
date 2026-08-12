@@ -6,11 +6,13 @@ export default function MenuScreenLayout({
     title,
     kicker,
     children,
+    actions,
     backScreen = "main",
 }: {
     title: string;
     kicker: string;
     children: ReactNode;
+    actions?: ReactNode;
     backScreen?: MenuScreen;
 }) {
     const back = () => store.patch({ menuScreen: backScreen });
@@ -31,6 +33,7 @@ export default function MenuScreenLayout({
                 {children}
                 <span className="subscreen-end" data-testid="screen-end" aria-hidden="true" />
             </div>
+            {actions && <div className="subscreen-action-rail">{actions}</div>}
         </main>
     );
 }

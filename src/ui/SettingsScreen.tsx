@@ -82,7 +82,10 @@ export default function SettingsScreen() {
                         onChange={(event) => persist({ sfxVolume: Number(event.target.value) })}
                     />
                 </label>
-                <div className="setting-row">
+                {/* A label, not a div, like its siblings: a bare checkbox is a
+                    sub-44px target, so the row text must toggle it. Clicks on
+                    the nested TEST button stay its own. */}
+                <label className="setting-row">
                     <span>{t("SettingsHaptics")}</span>
                     <div className="setting-actions">
                         <input
@@ -95,7 +98,7 @@ export default function SettingsScreen() {
                             TEST
                         </button>
                     </div>
-                </div>
+                </label>
                 <Toggle
                     label={t("SettingsReducedMotion")}
                     checked={state.reducedMotion}

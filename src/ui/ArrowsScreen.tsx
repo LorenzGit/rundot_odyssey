@@ -1,5 +1,6 @@
 import { ARROWS, equipArrow, loadArrowProgress, tryBuyArrow, type ArrowId } from "../game/arrows.ts";
 import { formatNumber, t } from "../systems/localization.ts";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 import { saveSystem } from "../systems/save.ts";
 import { store, useStore } from "../state/store.ts";
 import MenuScreenLayout from "./MenuScreenLayout.tsx";
@@ -62,6 +63,13 @@ export default function ArrowsScreen() {
                                             onClick={() => {
                                                 const result = tryBuyArrow(progress, arrow.id as ArrowId);
                                                 if (result.ok) {
+                                                    analytics.spend(
+                                                        "drachmae",
+                                                        arrow.cost,
+                                                        "arrow_unlock",
+                                                        arrow.id,
+                                                        progress.coins,
+                                                    );
                                                     void saveSystem.flush();
                                                     store.patch({ toast: `BOUGHT ${arrow.name}` });
                                                 } else {

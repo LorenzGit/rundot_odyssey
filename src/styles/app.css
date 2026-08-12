@@ -144,6 +144,37 @@ input:focus-visible {
     visibility: hidden;
 }
 
+.renderer-recovery {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 12px;
+    padding: max(28px, var(--safe-top)) max(28px, var(--safe-right)) max(28px, var(--safe-bottom))
+        max(28px, var(--safe-left));
+    color: var(--cream);
+    text-align: center;
+    background: radial-gradient(100% 100% at 50% 35%, rgb(17 66 94 / 0.96), rgb(3 20 36 / 0.99));
+}
+
+.renderer-recovery h1,
+.renderer-recovery p {
+    margin: 0;
+}
+
+.renderer-recovery h1 {
+    color: var(--gold-light);
+    font-size: clamp(28px, 5vw, 54px);
+}
+
+.renderer-recovery > div {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .canvas-curtain {
         transition: visibility 0s;
@@ -484,7 +515,7 @@ input:focus-visible {
 .run-teaser {
     margin: 0;
     max-width: 100%;
-    font-size: clamp(9px, 1.5vh, 12px);
+    font-size: clamp(10px, 1.5vh, 12px);
     font-weight: 800;
     letter-spacing: 0.06em;
     color: #8ef0a8;
@@ -718,6 +749,14 @@ input:focus-visible {
     gap: 14px;
 }
 
+.subscreen-action-rail {
+    z-index: 2;
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    padding: 0 4px 6px;
+}
+
 .subscreen-panel {
     width: min(720px, 100%);
     margin: 0 auto;
@@ -851,6 +890,21 @@ input:focus-visible {
     accent-color: var(--gold);
 }
 
+.quest-card > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.quest-card > div strong {
+    min-width: 0;
+}
+
+.quest-card > div span {
+    flex: 0 0 auto;
+}
+
 .quest-card button,
 .shop-card button {
     min-height: 40px;
@@ -941,10 +995,9 @@ input:focus-visible {
 }
 
 .claim-action {
-    align-self: center;
-    min-width: min(320px, 100%);
+    width: min(420px, 100%);
     min-height: 56px;
-    margin: 8px auto 0;
+    margin: 0;
     padding: 0 28px;
     border-radius: 14px;
     font-weight: 800;
