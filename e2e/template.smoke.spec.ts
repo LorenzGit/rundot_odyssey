@@ -67,12 +67,49 @@ async function snapshot(page: Page): Promise<Snapshot> {
 
 test("a stalled critical painting cannot trap the player on loading", async ({ page }) => {
     await page.setViewportSize({ width: 956, height: 440 });
-    await page.route(/level-1.*\.png/, async (route) => {
+    await page.route(/level-1.*\.webp/, async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 13_000));
         await route.continue();
     });
     await page.goto("/?renderer=webgl&qa=1");
     await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 20_000 });
+});
+
+test("a transient critical painting failure retries before revealing the menu", async ({ page, runtimeIssues }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    let attempts = 0;
+    await page.route(/level-1.*\.webp/, async (route) => {
+        if (route.request().resourceType() !== "image") {
+            await route.continue();
+            return;
+        }
+        attempts += 1;
+        if (attempts === 1) await route.abort("connectionreset");
+        else await route.continue();
+    });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toBeVisible({ timeout: 20_000 });
+    expect(attempts).toBe(2);
+    runtimeIssues.length = 0;
+});
+
+test("a persistent critical painting failure never reveals an incomplete menu", async ({ page, runtimeIssues }) => {
+    await page.setViewportSize({ width: 956, height: 440 });
+    let attempts = 0;
+    await page.route(/level-1.*\.webp/, async (route) => {
+        if (route.request().resourceType() !== "image") {
+            await route.continue();
+            return;
+        }
+        attempts += 1;
+        await route.abort("connectionreset");
+    });
+    await page.goto("/?renderer=webgl&qa=1");
+    await expect(page.getByRole("heading", { name: "Unable to start" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "RELOAD" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(play|continue)$/i })).toHaveCount(0);
+    expect(attempts).toBe(2);
+    runtimeIssues.length = 0;
 });
 
 /** Jump to a depth with a shaft that can survive it. */

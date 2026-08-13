@@ -1,4 +1,5 @@
 import React from "react";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 
 interface ErrorBoundaryState {
     failed: boolean;
@@ -11,8 +12,11 @@ export default class ErrorBoundary extends React.Component<React.PropsWithChildr
         return { failed: true };
     }
 
-    componentDidCatch(error: Error): void {
+    componentDidCatch(error: Error, info: React.ErrorInfo): void {
         console.error("[ui] render failed", error);
+        analytics.trackError("react_render_boundary", error, {
+            component_stack: info.componentStack?.slice(0, 500) ?? "",
+        });
     }
 
     render(): React.ReactNode {

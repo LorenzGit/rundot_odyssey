@@ -11,6 +11,7 @@ import {
     refreshRunCapabilities,
     registerLifecycles,
     requestHostExit,
+    recordErrorLog,
 } from "./sdk/runSdk.ts";
 import { analytics } from "./systems/analytics/analyticsConfig.ts";
 import { resolveReturnLaunch } from "./systems/retention/retentionConfig.ts";
@@ -22,8 +23,6 @@ import { runtimeServices } from "./systems/runtimeServices.ts";
 import { reconcilePendingPurchase, refreshCommerce } from "./systems/monetization/commerce.ts";
 import { abandonOdysseyRun } from "./systems/runAnalytics.ts";
 import { resumeFromHostPause, setHostPaused } from "./systems/hostPause.ts";
-import { installBrowserQaContract } from "./qa/browserContract.ts";
-import { installProgressionDevTools } from "./game/progression.ts";
 import "./styles/app.css";
 
 /** Settle any interrupted order, then re-read ownership and unspent packs. */
@@ -64,11 +63,14 @@ function setBootProgress(progress: number): void {
     }
 }
 
+let bootStage = "script_started";
+
 // Fired at module scope, before boot() and before any await.
 analytics.installErrorCapture();
 analytics.funnelStep("load", 1);
 
 async function boot() {
+    bootStage = "react_mount";
     const rootElement = document.getElementById("root");
     if (!rootElement) throw new Error("Missing required #root mount element");
     createRoot(rootElement).render(
@@ -80,6 +82,7 @@ async function boot() {
     );
 
     setBootProgress(0.05);
+    bootStage = "host_and_save";
     await Promise.all([
         initSdk().then(() => {
             analytics.markTransportReady();
@@ -96,7 +99,14 @@ async function boot() {
     ]);
     setBootProgress(0.15);
 
-    await warmAssets((p) => setBootProgress(0.15 + p * 0.85));
+    bootStage = "critical_menu_asset";
+    await warmAssets({
+        onProgress: (p) => setBootProgress(0.15 + p * 0.85),
+        onEvent: ({ name, ...payload }) => {
+            analytics.event(name, payload);
+            if (name === "critical_asset_failure") recordErrorLog(name, payload.reason, payload);
+        },
+    });
 
     // An order that survived a host kill, or a pack bought while the app was
     // backgrounded, must settle before the player can reach the shop — waiting
@@ -104,6 +114,7 @@ async function boot() {
     void reconcileCommerce();
 
     setBootProgress(1);
+    bootStage = "menu_handoff";
     analytics.funnelStep("load", 4);
     store.patch({ phase: "menu", loadProgress: 1 });
     requestAnimationFrame(() => {
@@ -165,8 +176,14 @@ async function boot() {
     analytics.sessionStart(store.get().totalPlays === 0, await readAttribution());
     const returnReminderId = await resolveReturnLaunch();
     if (returnReminderId === "d1") store.patch({ menuScreen: "daily-rewards" });
-    installBrowserQaContract();
-    installProgressionDevTools();
+    if (import.meta.env.DEV) {
+        const [{ installBrowserQaContract }, { installProgressionDevTools }] = await Promise.all([
+            import("./qa/browserContract.ts"),
+            import("./game/progression.ts"),
+        ]);
+        installBrowserQaContract();
+        installProgressionDevTools();
+    }
 }
 
 function preventBrowserChrome(event: Event): void {
@@ -185,7 +202,7 @@ window.addEventListener("unhandledrejection", (event) => {
 function start(): void {
     void boot().catch((error) => {
         console.error("[boot] fatal startup failure", error);
-        analytics.trackError("boot_failure", error);
+        analytics.trackError("boot_failure", error, { stage: bootStage });
         analytics.markTransportReady();
         liftBootCover();
         const root = document.getElementById("root");
@@ -197,7 +214,12 @@ function start(): void {
         heading.textContent = "Unable to start";
         const guidance = document.createElement("p");
         guidance.textContent = "Reload to try again.";
-        message.append(heading, guidance);
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "ody-btn";
+        retry.textContent = "RELOAD";
+        retry.addEventListener("click", () => window.location.reload());
+        message.append(heading, guidance, retry);
         root.replaceChildren(message);
     });
 }

@@ -31,6 +31,20 @@ function verifyEmbeddedLibraries() {
     assert(indexHtml.includes("_rundot_bootstrap"), "embedded-library bootstrap is absent from index.html");
 }
 
+const entryMatch = indexHtml.match(/<script type="module"[^>]*src="\.\/assets\/([^\"]+\.js)"/);
+assert(entryMatch, "production entry script is missing from index.html");
+const entryJavaScript = fs.readFileSync(path.join(dist, "assets", entryMatch[1]), "utf8");
+assert(!/from["']\.\/pixi-/.test(entryJavaScript), "Pixi renderer is still a static cold-boot dependency");
+
+const menuBackdrop = fs
+    .readdirSync(path.join(dist, "assets"))
+    .find((name) => name.startsWith("level-1-") && name.endsWith(".webp"));
+assert(menuBackdrop, "optimized full-resolution menu backdrop is missing");
+assert(
+    fs.statSync(path.join(dist, "assets", menuBackdrop)).size <= 300_000,
+    `menu backdrop exceeds 300 KB boot budget: ${menuBackdrop}`,
+);
+
 if (mode === "bundled") {
     assert(!fs.existsSync(manifestPath), "standalone build unexpectedly emitted an embedded-library manifest");
     assert(!indexHtml.includes("_rundot_bootstrap"), "standalone build unexpectedly references the RUN bootstrap");

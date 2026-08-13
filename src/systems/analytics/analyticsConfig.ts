@@ -1,5 +1,5 @@
 import { store } from "../../state/store.ts";
-import { recordAnalytics, recordFunnelStep } from "../../sdk/runSdk.ts";
+import { recordAnalytics, recordErrorLog, recordFunnelStep } from "../../sdk/runSdk.ts";
 import packageJson from "../../../package.json";
 import { countedSteps, createAnalytics } from "./analytics.ts";
 
@@ -20,6 +20,7 @@ export const analytics = createAnalytics({
     emitEvent: (name, payload) => {
         void recordAnalytics(name, { ...payload, build_version: packageJson.version });
     },
+    emitErrorLog: recordErrorLog,
     emitFunnelStep: (step, name, funnel, order) => {
         // Return (not void) the promise: on onceEver funnels the lifetime mark
         // is only persisted once the SDK confirms delivery.

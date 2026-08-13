@@ -1,65 +1,135 @@
-/**
- * Asset warming via Pixi Assets.
- *
- * Boot gate: await only the critical (main-menu) bundle with progress.
- * Deferred bundles start as fire-and-forget after the gate — they must not
- * delay the main menu. Never put video preloads on this path.
- *
- * Failure posture: a missing asset must never brick boot. Errors are logged
- * and boot continues.
- */
-import { Assets } from "pixi.js";
-import { MANIFEST, CRITICAL_BUNDLES, DEFERRED_BUNDLES } from "./manifest.ts";
+/** Renderer-free loading for the one image required by the DOM main menu. */
+import { MENU_BACKDROP } from "./manifest.ts";
 
-async function withDeadline<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-    });
-    try {
-        return await Promise.race([promise, deadline]);
-    } finally {
-        if (timer !== undefined) clearTimeout(timer);
+const LOAD_TIMEOUT_MS = 15_000;
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 350;
+
+export type CriticalAssetEventName = "critical_asset_timeout" | "critical_asset_retry" | "critical_asset_failure";
+
+export interface CriticalAssetEvent {
+    name: CriticalAssetEventName;
+    asset_id: string;
+    attempt: number;
+    elapsed_ms: number;
+    reason: string;
+    timeout_ms: number;
+}
+
+export interface WarmAssetsOptions {
+    onProgress?: (progress: number) => void;
+    onEvent?: (event: CriticalAssetEvent) => void;
+}
+
+class AssetTimeoutError extends Error {
+    constructor(timeoutMs: number) {
+        super(`Image download or decode timed out after ${timeoutMs}ms`);
+        this.name = "AssetTimeoutError";
     }
 }
 
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function wait(delayMs: number): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+/** Resolve only when the exact image the menu uses has downloaded and decoded. */
+function loadDecodedImage(url: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        let settled = false;
+        const finish = (error?: unknown) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            image.onload = null;
+            image.onerror = null;
+            if (error) reject(error);
+            else resolve();
+        };
+        const timeout = window.setTimeout(() => {
+            image.src = "";
+            finish(new AssetTimeoutError(timeoutMs));
+        }, timeoutMs);
+
+        image.decoding = "async";
+        image.onload = () => {
+            if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+                finish(new Error("Image decoded without usable dimensions"));
+                return;
+            }
+            // `load` proves the image has a usable decoded frame in browsers
+            // where decode() is absent or rejects after an already-valid load.
+            if (typeof image.decode !== "function") {
+                finish();
+                return;
+            }
+            void image.decode().then(
+                () => finish(),
+                () => finish(),
+            );
+        };
+        image.onerror = () => finish(new Error("Image request or decode failed"));
+        image.src = url;
+    });
+}
+
 /**
- * @param onProgress 0..1, called as the critical bundle loads; always ends
- *   with a final call at 1.
+ * The full-resolution menu painting is a hard visual gate. A transient fetch
+ * gets one bounded retry; a final failure rejects into the visible boot
+ * recovery screen instead of revealing a half-painted menu.
  */
-export async function warmAssets(onProgress: (progress: number) => void = () => {}): Promise<void> {
-    try {
-        await withDeadline(Assets.init({ manifest: MANIFEST }), 4_000, "asset manifest");
-        if (CRITICAL_BUNDLES.length > 0) {
-            await withDeadline(Assets.loadBundle(CRITICAL_BUNDLES, onProgress), 12_000, "critical asset bundle");
+export async function warmAssets(options: WarmAssetsOptions = {}): Promise<void> {
+    const onProgress = options.onProgress ?? (() => {});
+    const onEvent = options.onEvent ?? (() => {});
+    let lastError: unknown = new Error("Critical asset did not start");
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        const startedAt = performance.now();
+        try {
+            onProgress(attempt === 1 ? 0.15 : 0.3);
+            await loadDecodedImage(MENU_BACKDROP.url, LOAD_TIMEOUT_MS);
+            onProgress(1);
+            return;
+        } catch (error) {
+            lastError = error;
+            const elapsedMs = Math.round(performance.now() - startedAt);
+            const reason = errorMessage(error).slice(0, 200);
+            if (error instanceof AssetTimeoutError) {
+                onEvent({
+                    name: "critical_asset_timeout",
+                    asset_id: MENU_BACKDROP.id,
+                    attempt,
+                    elapsed_ms: elapsedMs,
+                    reason,
+                    timeout_ms: LOAD_TIMEOUT_MS,
+                });
+            }
+            if (attempt < MAX_ATTEMPTS) {
+                onEvent({
+                    name: "critical_asset_retry",
+                    asset_id: MENU_BACKDROP.id,
+                    attempt,
+                    elapsed_ms: elapsedMs,
+                    reason,
+                    timeout_ms: LOAD_TIMEOUT_MS,
+                });
+                await wait(RETRY_DELAY_MS);
+                continue;
+            }
+            onEvent({
+                name: "critical_asset_failure",
+                asset_id: MENU_BACKDROP.id,
+                attempt,
+                elapsed_ms: elapsedMs,
+                reason,
+                timeout_ms: LOAD_TIMEOUT_MS,
+            });
         }
-        if (DEFERRED_BUNDLES.length > 0) {
-            // Deliberately NOT Assets.backgroundLoadBundle: its internal queue
-            // has no rejection handling, so one flaky fetch silently wedges
-            // every remaining deferred asset for the session. Sequential loads
-            // with a catch keep the trickle alive past a failure, and Assets
-            // dedupes if a later explicit load needs one of these sooner.
-            void (async () => {
-                for (const bundle of DEFERRED_BUNDLES) {
-                    try {
-                        await Assets.loadBundle(bundle);
-                    } catch (error) {
-                        console.warn(`[preload] deferred bundle "${bundle}" failed — skipping`, error);
-                    }
-                }
-            })();
-        }
-    } catch (err) {
-        console.warn("[preload] asset warm failed — continuing without", err);
     }
 
-    // Wait for @font-face fonts so the first painted screen doesn't swap
-    // fonts mid-frame. (No custom fonts by default; harmless either way.)
-    try {
-        await withDeadline(document.fonts.ready, 1_500, "font warmup");
-    } catch {
-        /* older engines */
-    }
-
-    onProgress(1);
+    throw lastError;
 }

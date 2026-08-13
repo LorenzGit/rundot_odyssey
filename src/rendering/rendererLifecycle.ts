@@ -1,4 +1,5 @@
 import type { Application } from "pixi.js";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 
 type Cleanup = () => Promise<void> | void;
 
@@ -191,6 +192,10 @@ class RendererLifecycleManager {
         this.failureCount += 1;
         const failure = error instanceof Error ? error : new Error(errorMessage(error));
         console.error(`[renderer:${label}] ${failure.message}`, failure);
+        analytics.trackError("renderer_runtime_failure", failure, {
+            renderer_label: label,
+            failure_count: this.failureCount,
+        });
         document.documentElement.dataset.rendererFailureCount = String(this.failureCount);
         window.dispatchEvent(
             new CustomEvent("rundot:renderer-error", {

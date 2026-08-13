@@ -14,9 +14,9 @@ export const TARGET_DISC = {
 
 /** Bundled Odyssey sprite and backdrop URLs (Vite resolves via import.meta.url). */
 export const ODYSSEY_ART = {
-    level1: new URL("../assets/art/odyssey/level-1.png", import.meta.url).href,
-    level2: new URL("../assets/art/odyssey/level-2.png", import.meta.url).href,
-    level3: new URL("../assets/art/odyssey/level-3.png", import.meta.url).href,
+    level1: new URL("../assets/art/odyssey/level-1.webp", import.meta.url).href,
+    level2: new URL("../assets/art/odyssey/level-2.webp", import.meta.url).href,
+    level3: new URL("../assets/art/odyssey/level-3.webp", import.meta.url).href,
     ulyssesUpper: new URL("../assets/art/odyssey/ulysses-upper.png", import.meta.url).href,
     ulyssesLower: new URL("../assets/art/odyssey/ulysses-lower.png", import.meta.url).href,
     ulyssesBelt: new URL("../assets/art/odyssey/ulysses-belt.png", import.meta.url).href,

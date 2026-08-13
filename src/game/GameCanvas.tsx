@@ -47,7 +47,10 @@ export default function GameCanvas() {
         const watchdog = window.setTimeout(() => {
             if (abortController.signal.aborted) return;
             document.documentElement.dataset.odysseyError = "renderer_timeout";
-            analytics.event("renderer_load_stalled", { timeout_seconds: 15, attempt: attempt + 1 });
+            analytics.trackError("renderer_load_stalled", new Error("Renderer initialization exceeded 15 seconds"), {
+                timeout_seconds: 15,
+                attempt: attempt + 1,
+            });
             setFailure("The course art is taking too long to arrive.");
             setReady(true);
         }, 15_000);
@@ -67,7 +70,7 @@ export default function GameCanvas() {
                 if (abortController.signal.aborted || (error instanceof DOMException && error.name === "AbortError"))
                     return;
                 console.error("[odyssey] renderer initialization failed", error);
-                analytics.trackError("renderer_initialization", error);
+                analytics.trackError("renderer_initialization", error, { attempt: attempt + 1 });
                 document.documentElement.dataset.odysseyError = "renderer";
                 // Never leave the curtain up on failure — the error surface
                 // has to be reachable.

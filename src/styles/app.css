@@ -290,7 +290,7 @@ input:focus-visible {
     inset: 0;
     background:
         linear-gradient(180deg, rgb(4 21 37 / 0.42) 0%, rgb(4 21 37 / 0.55) 100%),
-        url("../assets/art/odyssey/level-1.png") center / cover no-repeat;
+        url("../assets/art/odyssey/level-1.webp") center / cover no-repeat;
     pointer-events: none;
 }
 
@@ -686,7 +686,7 @@ input:focus-visible {
         max(18px, var(--safe-left));
     background:
         linear-gradient(180deg, rgb(4 21 37 / 0.55) 0%, rgb(4 21 37 / 0.7) 100%),
-        url("../assets/art/odyssey/level-1.png") center / cover no-repeat;
+        url("../assets/art/odyssey/level-1.webp") center / cover no-repeat;
     color: var(--cream);
     overflow: hidden;
 }

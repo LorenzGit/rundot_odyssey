@@ -53,6 +53,8 @@ export interface FunnelDefinition {
 export interface AnalyticsConfig {
     /** Record a custom event. Wire this to the game's own SDK wrapper. */
     emitEvent: (name: string, payload: EventProps) => void;
+    /** Mirror errors to host support logs; structured analysis still uses emitEvent. */
+    emitErrorLog?: (context: string, message: string, payload: EventProps) => void;
     /**
      * Record a funnel step. Wire this to the game's own SDK wrapper. May
      * return whether delivery succeeded; on an `onceEver` funnel the lifetime
@@ -132,7 +134,15 @@ export interface Analytics {
 const DEFAULT_MARKS_KEY = "analytics_funnel_marks";
 
 export function createAnalytics(config: AnalyticsConfig): Analytics {
-    const { emitEvent, emitFunnelStep, funnels = {}, enrich = null, enabled = {}, debug = false } = config;
+    const {
+        emitEvent,
+        emitErrorLog,
+        emitFunnelStep,
+        funnels = {},
+        enrich = null,
+        enabled = {},
+        debug = false,
+    } = config;
     const marksKey = config.marksKey ?? DEFAULT_MARKS_KEY;
 
     // Once-ever marks are read once and cached: funnelStep runs on gameplay
@@ -225,6 +235,44 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
         });
     }
 
+    function sanitizeDiagnosticText(value: string, maxLength: number): string {
+        return value
+            .replace(/([a-z][a-z0-9+.-]*:\/\/[^\s?#)]+)[?#][^\s)]*/gi, "$1")
+            .replace(/\b(token|secret|authorization|api[_-]?key)=([^\s&]+)/gi, "$1=[redacted]")
+            .slice(0, maxLength);
+    }
+
+    function errorDetails(error: unknown): EventProps {
+        if (!(error instanceof Error)) return { message: sanitizeDiagnosticText(String(error), 300) };
+        const structured = error as Error & { code?: unknown; status?: unknown; detail?: unknown };
+        return {
+            error_name: error.name.slice(0, 80),
+            message: sanitizeDiagnosticText(error.message, 300),
+            stack: error.stack ? sanitizeDiagnosticText(error.stack, 1_000) : undefined,
+            code: typeof structured.code === "string" ? structured.code.slice(0, 80) : undefined,
+            status: typeof structured.status === "number" ? structured.status : undefined,
+            detail: typeof structured.detail === "string" ? sanitizeDiagnosticText(structured.detail, 300) : undefined,
+        };
+    }
+
+    function sourceBasename(source: string): string {
+        try {
+            return new URL(source, window.location.href).pathname.split("/").pop()?.slice(0, 160) ?? "";
+        } catch {
+            return source.split(/[/?#]/)[0]?.slice(0, 160) ?? "";
+        }
+    }
+
+    function reportError(context: string, error: unknown, props?: EventProps): void {
+        const details: EventProps = { type: context, ...errorDetails(error), ...props };
+        system.event("error_occurred", details);
+        try {
+            emitErrorLog?.(context, String(details.message ?? context), details);
+        } catch {
+            // Error reporting must never become another player-facing error.
+        }
+    }
+
     const system: Analytics = {
         event(name, props) {
             if (isOff(name)) return;
@@ -290,24 +338,21 @@ export function createAnalytics(config: AnalyticsConfig): Analytics {
         },
 
         trackError(context, error, props) {
-            const message = error instanceof Error ? error.message : String(error);
-            system.event("error_occurred", { type: context, message: message.slice(0, 200), ...props });
+            reportError(context, error, props);
         },
 
         installErrorCapture() {
             if (errorCaptureInstalled || typeof window === "undefined") return;
             errorCaptureInstalled = true;
             window.addEventListener("error", (event) => {
-                system.event("error_occurred", {
-                    type: "window_error",
-                    message: String(event.message).slice(0, 200),
-                    source: event.filename ?? "",
+                reportError("window_error", event.error ?? new Error(String(event.message)), {
+                    source: sourceBasename(event.filename ?? ""),
                     line: event.lineno ?? 0,
+                    column: event.colno ?? 0,
                 });
             });
             window.addEventListener("unhandledrejection", (event) => {
-                const reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
-                system.event("error_occurred", { type: "unhandled_rejection", message: reason.slice(0, 200) });
+                reportError("unhandled_rejection", event.reason);
             });
         },
 

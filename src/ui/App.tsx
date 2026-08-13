@@ -5,8 +5,7 @@
  * #app-frame is the playable frame: landscape-first for Odyssey, with a
  * portrait "rotate device" gate. Everything interactive lives inside the frame.
  */
-import { useEffect } from "react";
-import GameCanvas from "../game/GameCanvas.tsx";
+import { lazy, Suspense, useEffect } from "react";
 import { applyRunSafeArea } from "../sdk/runSdk.ts";
 import { audioManager } from "../audio/audioManager.ts";
 import { store, useStore } from "../state/store.ts";
@@ -22,6 +21,8 @@ import StatsScreen from "./StatsScreen.tsx";
 import { useButtonFeedback } from "./useButtonFeedback.ts";
 
 const TOAST_AUTO_HIDE_MS = 4_000;
+const loadGameCanvas = () => import("../game/GameCanvas.tsx");
+const GameCanvas = lazy(loadGameCanvas);
 
 function useOrientationSafeArea(): void {
     useEffect(() => {
@@ -79,6 +80,17 @@ export default function App() {
     useButtonFeedback();
     const phase = useStore((s) => s.phase);
 
+    // Gameplay owns Pixi; the menu does not. Warm that dynamic chunk only
+    // after the complete menu has painted, so renderer code never delays boot
+    // but a deliberate PLAY usually has it cached already.
+    useEffect(() => {
+        if (phase !== "menu") return;
+        const idle = window.requestIdleCallback?.(() => void loadGameCanvas(), { timeout: 1_500 });
+        if (idle !== undefined) return () => window.cancelIdleCallback?.(idle);
+        const timer = window.setTimeout(() => void loadGameCanvas(), 500);
+        return () => window.clearTimeout(timer);
+    }, [phase]);
+
     // Drop the HTML boot cover once we leave loading.
     useEffect(() => {
         if (phase === "loading") return;
@@ -96,7 +108,9 @@ export default function App() {
             {phase === "playing" && (
                 <div className="play-surface">
                     <div id="game-host">
-                        <GameCanvas />
+                        <Suspense fallback={<div className="canvas-curtain" aria-hidden="true" />}>
+                            <GameCanvas />
+                        </Suspense>
                     </div>
                     <Hud />
                 </div>

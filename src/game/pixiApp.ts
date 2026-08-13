@@ -8,6 +8,8 @@ import {
     ownPixiApplication,
     type RendererLifecycleScope,
 } from "../rendering/rendererLifecycle.ts";
+import { recordErrorLog } from "../sdk/runSdk.ts";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 
 type RendererPreference = "webgpu" | "webgl";
 
@@ -91,7 +93,31 @@ export async function createPixiApp(scope: RendererLifecycleScope, host: HTMLEle
             scope.throwIfCancelled();
             webGpuProvenBroken = true;
             console.warn("[renderer] WebGPU unusable; falling back to WebGL", webGpuError);
-            app = await initializeRenderer(scope, host, "webgl");
+            const fallbackContext = {
+                failed_backend: "webgpu",
+                fallback_backend: "webgl",
+                message:
+                    webGpuError instanceof Error
+                        ? webGpuError.message.slice(0, 200)
+                        : String(webGpuError).slice(0, 200),
+            };
+            analytics.event("renderer_backend_fallback", fallbackContext);
+            recordErrorLog("renderer_backend_fallback", fallbackContext.message, fallbackContext);
+            try {
+                app = await initializeRenderer(scope, host, "webgl");
+            } catch (webGlError) {
+                const exhaustedContext = {
+                    failed_backend: "webgl",
+                    prior_backend: "webgpu",
+                    message:
+                        webGlError instanceof Error
+                            ? webGlError.message.slice(0, 200)
+                            : String(webGlError).slice(0, 200),
+                };
+                analytics.event("renderer_fallback_exhausted", exhaustedContext);
+                recordErrorLog("renderer_fallback_exhausted", exhaustedContext.message, exhaustedContext);
+                throw webGlError;
+            }
         }
     }
     const rendererName = rendererBackend(app);

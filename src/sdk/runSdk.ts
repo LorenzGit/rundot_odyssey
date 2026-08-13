@@ -385,6 +385,16 @@ export async function recordAnalytics(eventName: string, payload: Record<string,
     }
 }
 
+/** Human-readable production error log for RUN support tooling. */
+export function recordErrorLog(context: string, message: string, payload: Record<string, unknown> = {}): void {
+    if (!_ready) return;
+    try {
+        RundotGameAPI.error(`[odyssey:${context}] ${message.slice(0, 300)}`, payload);
+    } catch {
+        // Logging is observational and must never alter gameplay or recovery.
+    }
+}
+
 export async function recordFunnelStep(step: number, name: string, funnel: string, funnelOrder = 0): Promise<boolean> {
     if (!capabilities.analytics) return false;
     try {
