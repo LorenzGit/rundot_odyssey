@@ -19,6 +19,7 @@ import SettingsScreen from "./SettingsScreen.tsx";
 import ShopScreen from "./ShopScreen.tsx";
 import StatsScreen from "./StatsScreen.tsx";
 import { useButtonFeedback } from "./useButtonFeedback.ts";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 
 const TOAST_AUTO_HIDE_MS = 4_000;
 const loadGameCanvas = () => import("../game/GameCanvas.tsx");
@@ -79,6 +80,12 @@ export default function App() {
     useAudioUnlock();
     useButtonFeedback();
     const phase = useStore((s) => s.phase);
+
+    // RUN's core-loop query expects screen_viewed; this router is the only
+    // place every screen change passes through.
+    useEffect(() => {
+        analytics.event("screen_viewed", { screen: phase });
+    }, [phase]);
 
     // Gameplay owns Pixi; the menu does not. Warm that dynamic chunk only
     // after the complete menu has painted, so renderer code never delays boot

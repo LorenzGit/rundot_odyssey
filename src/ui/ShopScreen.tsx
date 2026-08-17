@@ -11,6 +11,7 @@ import {
     refreshCommerce,
     validateCatalogInDevelopment,
     type ProductView,
+    recordStoreOpened,
 } from "../systems/monetization/commerce.ts";
 import { PRODUCT_BLURBS, type ProductId } from "../systems/monetization/config.ts";
 import { runtimeServices } from "../systems/runtimeServices.ts";
@@ -68,6 +69,9 @@ export default function ShopScreen() {
 
     const patronage = productView("navigators_patronage");
     const packs = PACK_PRODUCTS.map((pack) => ({ ...pack, view: productView(pack.productId) }));
+    useEffect(() => {
+        recordStoreOpened(["navigators_patronage", ...PACK_PRODUCTS.map((p) => p.productId)]);
+    }, []);
     const capabilities = getRunCapabilities();
     // One honest reason the card cannot be tapped, never a placeholder claim.
     const blockedReason = (view: ProductView): string => {

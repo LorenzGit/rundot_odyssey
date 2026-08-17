@@ -136,6 +136,45 @@
             <div class="boot-track"><div class="boot-fill"></div></div>
         </div>
         <div id="root"></div>
+        <!--
+            Boot watchdog.
+
+            Every other recovery path in this game lives inside main.tsx: the
+            boot() catch, the asset timeout, the late-host watcher. All of them
+            require the module bundle to have executed. When the bundle itself
+            never fetches, never parses, or throws at import time on an old
+            WebView, none of that code runs and #boot-cover stays up forever
+            with an animating progress bar and no way out — which is exactly
+            what two players reported as "stuck loading" / "doesn't load up".
+
+            This is a classic script on purpose: it must run even when the
+            module graph is the thing that failed. It never hides a real boot,
+            only a boot that has already stopped happening.
+        -->
+        <script>
+            (function () {
+                var GRACE_MS = 20000;
+                var timer = window.setTimeout(function () {
+                    var cover = document.getElementById("boot-cover");
+                    if (!cover || cover.classList.contains("hidden")) return;
+                    var status = cover.querySelector(".boot-status");
+                    if (status) status.textContent = "COULD NOT LOAD";
+                    var track = cover.querySelector(".boot-track");
+                    if (track && track.parentNode) track.parentNode.removeChild(track);
+                    var hint = document.createElement("p");
+                    hint.textContent = "Check your connection and reload.";
+                    var retry = document.createElement("button");
+                    retry.type = "button";
+                    retry.textContent = "RELOAD";
+                    retry.addEventListener("click", function () { window.location.reload(); });
+                    cover.appendChild(hint);
+                    cover.appendChild(retry);
+                    cover.setAttribute("aria-busy", "false");
+                }, GRACE_MS);
+                // The game clears this as soon as it owns the screen.
+                window.__odysseyBootWatchdog = timer;
+            })();
+        </script>
         <script type="module" src="./src/main.tsx"></script>
     </body>
 </html>

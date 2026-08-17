@@ -77,6 +77,7 @@ import {
     startOdysseyRun,
 } from "../systems/runAnalytics.ts";
 import { saveSystem } from "../systems/save.ts";
+import { analytics } from "../systems/analytics/analyticsConfig.ts";
 import {
     getRunCapabilities,
     setNotificationPreference,
@@ -422,6 +423,17 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 const payout = resultEarned + (patron ? resultBounty : 0);
                 arrowProgress.coins += payout;
                 saveArrowProgress(arrowProgress);
+                // The spend side was already instrumented in ArrowsScreen; the
+                // earn side was not, so the economy only ever showed drachmae
+                // leaving the wallet and never arriving.
+                if (payout > 0) {
+                    analytics.event("currency_earned", {
+                        currency: "drachmae",
+                        amount: payout,
+                        source: "course_clear",
+                        balance_after: arrowProgress.coins,
+                    });
+                }
                 const best = Math.max(store.get().score, shot.score);
                 store.patch({ score: best, coins: arrowProgress.coins });
                 // Clearing banks the depth and arms the next course.
@@ -1086,7 +1098,17 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         });
     }
 
-    /** Offer reminders only after a win, when their value is concrete. */
+    /**
+     * Offer reminders only after a win, when their value is concrete — and at
+     * most twice ever.
+     *
+     * The uncapped version showed 70 times to 10 players over 30 days and
+     * converted none of them. An offer a player has already declined twice is
+     * not persuasion, it is the thing that makes the results card feel like an
+     * ad slot, and it costs the goodwill the reward itself is meant to buy.
+     */
+    const REMINDER_OFFER_LIMIT = 2;
+
     function attachReminderOffer(overlay: Container, cx: number, y: number, panelH: number): boolean {
         const state = store.get();
         if (
@@ -1094,6 +1116,7 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
             !getRunCapabilities().notifications ||
             state.totalCompletions < 2 ||
             state.notificationsEnabled ||
+            state.reminderOffersShown >= REMINDER_OFFER_LIMIT ||
             state.notificationsConsent !== "unknown"
         )
             return false;
@@ -1105,7 +1128,11 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
                 void setNotificationPreference(true).then((result) => {
                     runtimeServices.track("retention_notification_opt_in_result", { result, course: level.depth });
                     if (result === "enabled") {
-                        store.patch({ notificationsEnabled: true, notificationsConsent: "granted" });
+                        store.patch({
+                            notificationsEnabled: true,
+                            notificationsOptOut: false,
+                            notificationsConsent: "granted",
+                        });
                         void saveSystem.flush();
                         runtimeServices.rearmNotifications();
                         reminder.root.visible = false;
@@ -1122,6 +1149,10 @@ export async function createOdysseyScene(app: Application, stage: Stage): Promis
         );
         reminder.root.position.set(cx + 230, y);
         overlay.addChild(reminder.root);
+        // Counted when SHOWN, not when declined: a player who ignores the card
+        // twice has answered as clearly as one who taps away.
+        store.patch({ reminderOffersShown: store.get().reminderOffersShown + 1 });
+        void saveSystem.flush();
         runtimeServices.track("retention_notification_offer_shown", { course: level.depth });
         return true;
     }

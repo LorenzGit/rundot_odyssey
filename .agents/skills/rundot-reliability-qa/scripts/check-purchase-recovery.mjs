@@ -67,10 +67,25 @@ async function collectSourceFiles(targetPath) {
     return files;
 }
 
+/**
+ * Only the coordinator itself, never a file that merely uses one.
+ *
+ * Matching on the presence of the `createPurchaseCoordinator` token flagged
+ * every `commerce.ts` that imports the factory, and then scanned that consumer
+ * for retry/idempotency logic which correctly lives inside the coordinator it
+ * delegates to — a guaranteed false FAIL. Whether a consumer tripped it came
+ * down to whether it happened to import the `PendingPurchaseIntent` type.
+ *
+ * A coordinator DEFINES the factory; a consumer imports it. Require the
+ * definition.
+ */
 function isCopiedPurchaseCoordinator(source) {
+    const definesFactory =
+        /export\s+function\s+createPurchaseCoordinator\b/.test(source) ||
+        /export\s+(?:const|let|var)\s+createPurchaseCoordinator\s*[:=]/.test(source);
     return (
+        definesFactory &&
         source.includes("PendingPurchaseIntent") &&
-        source.includes("createPurchaseCoordinator") &&
         source.includes("getOrderHistory") &&
         source.includes("idempotencyKey")
     );

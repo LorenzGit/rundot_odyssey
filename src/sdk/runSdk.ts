@@ -283,6 +283,32 @@ export async function requestServerEpochMs(): Promise<number | null> {
     }
 }
 
+/**
+ * Read the RUN app's notification permission WITHOUT prompting.
+ *
+ * The permission is app-wide, not per-game: `H5_IS_LOCAL_NOTIFICATIONS_ENABLED`
+ * and its setter carry no game id, so a player who allowed notifications for
+ * RUN in any game has already allowed them here. Read it at boot rather than
+ * waiting for a Settings visit that never comes — that wait is what left the
+ * whole reminder cadence dormant for players who had already said yes.
+ *
+ * Only `setLocalNotificationsEnabled` can surface a host prompt. This is the
+ * silent half, so it is safe to call on every runtime refresh.
+ */
+export async function readNotificationPermission(): Promise<boolean> {
+    if (!capabilities.notifications) return false;
+    try {
+        return await withTimeout(
+            RundotGameAPI.notifications.isLocalNotificationsEnabled(),
+            2_000,
+            "notifications.isLocalNotificationsEnabled",
+        );
+    } catch (error) {
+        console.warn("[runSdk] notification permission read failed", error);
+        return false;
+    }
+}
+
 export type NotificationPreferenceResult = "enabled" | "disabled" | "unavailable" | "failed";
 
 export async function setNotificationPreference(enabled: boolean): Promise<NotificationPreferenceResult> {

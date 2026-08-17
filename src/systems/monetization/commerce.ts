@@ -132,7 +132,7 @@ async function redeemDrachmaePacks(entitlements: readonly OwnedEntitlement[]): P
         );
         if (!consumed) continue;
         credited += payout;
-        monetizationTelemetry.record("reward_granted", {
+        monetizationTelemetry.record("reward_claimed", {
             source: "drachmae_pack",
             entitlement_id: entry.id,
             quantity: entry.quantity,
@@ -333,15 +333,30 @@ export async function refreshCommerce(): Promise<void> {
     return refreshInFlight;
 }
 
+/**
+ * The store surface was shown, with these offers on it.
+ *
+ * `offer_clicked` and the purchase outcome were already recorded, but without
+ * an impression the funnel has no denominator — a low purchase count reads
+ * identically whether the store is never opened or never converts. Call once
+ * per store open, not per render.
+ */
+export function recordStoreOpened(productIds: readonly string[], placement = "shop"): void {
+    monetizationTelemetry.record("store_opened", { placement, offers: productIds.length });
+    for (const productId of productIds) {
+        monetizationTelemetry.record("offer_shown", { product_id: productId, placement });
+    }
+}
+
 export async function purchaseProduct(productId: ProductId): Promise<PurchaseOutcome<ShopCheckoutResult> | null> {
     const definition = products.get(productId);
     if (!definition || !productView(productId).purchasable) return null;
 
-    monetizationTelemetry.record("purchase_tapped", { product_id: productId, placement: "shop" });
-    monetizationTelemetry.record("checkout_started", { product_id: productId, placement: "shop" });
+    monetizationTelemetry.record("offer_clicked", { product_id: productId, placement: "shop" });
+    monetizationTelemetry.record("iap_purchase_started", { product_id: productId, placement: "shop" });
     try {
         const outcome = await purchaseCoordinator.purchase(productId, definition.catalogItemId);
-        monetizationTelemetry.record("checkout_result", {
+        monetizationTelemetry.record(outcome.status === "confirmed" ? "iap_purchase_complete" : "iap_purchase_failed", {
             product_id: productId,
             placement: "shop",
             result: outcome.status,
@@ -371,7 +386,7 @@ export async function reconcilePendingPurchase(): Promise<void> {
     if (!pending) return;
     const outcome = await purchaseCoordinator.reconcilePending();
     if (!outcome) return;
-    monetizationTelemetry.record("checkout_result", {
+    monetizationTelemetry.record(outcome.status === "confirmed" ? "iap_purchase_complete" : "iap_purchase_failed", {
         product_id: pending.productId,
         placement: "resume_reconciliation",
         result: outcome.status,

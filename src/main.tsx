@@ -36,6 +36,9 @@ async function reconcileCommerce(): Promise<void> {
 }
 
 function liftBootCover(): void {
+    // The game owns the screen now; the HTML watchdog must not fire behind it.
+    const watchdog = (window as unknown as { __odysseyBootWatchdog?: number }).__odysseyBootWatchdog;
+    if (watchdog !== undefined) window.clearTimeout(watchdog);
     const cover = document.getElementById("boot-cover");
     if (!cover || cover.classList.contains("hidden")) return;
     cover.classList.add("hidden");
@@ -67,6 +70,10 @@ let bootStage = "script_started";
 
 // Fired at module scope, before boot() and before any await.
 analytics.installErrorCapture();
+// The browser's own end-of-session signals. onQuit alone produced two
+// session_end events across the whole fleet in thirty days, because it
+// needs a clean host quit and players just close the tab.
+analytics.installSessionEndCapture();
 analytics.funnelStep("load", 1);
 
 async function boot() {
