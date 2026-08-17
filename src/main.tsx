@@ -35,6 +35,55 @@ async function reconcileCommerce(): Promise<void> {
     }
 }
 
+const BOOT_FAILURE_KEY = "odyssey:boot-failure:v1";
+
+/** Shape the HTML boot watchdog publishes on `window.__boot`. */
+interface BootWatchdogState {
+    startedAt: number;
+    /** Set once the cover has been up longer than the slow threshold. */
+    slowMs: number | null;
+    outcome: string | null;
+    settled: boolean;
+    timer?: number;
+}
+
+/**
+ * Report what the boot watchdog observed.
+ *
+ * Two things get reported here, and neither could be reported when it happened:
+ *
+ *  - A boot that FAILED had no analytics module to report with — that was the
+ *    whole failure. The watchdog wrote it to localStorage instead, so the next
+ *    successful boot carries it. `elapsed_ms` is from the failed session.
+ *  - A boot that was merely SLOW succeeded, so it reports in-session.
+ *
+ * Call once, after the analytics transport is ready.
+ */
+function reportBootOutcome(): void {
+    const boot = (window as unknown as { __boot?: BootWatchdogState }).__boot;
+    try {
+        const raw = window.localStorage.getItem(BOOT_FAILURE_KEY);
+        if (raw) {
+            window.localStorage.removeItem(BOOT_FAILURE_KEY);
+            const record = JSON.parse(raw) as { reason?: string; elapsed_ms?: number; at?: string };
+            analytics.trackError("boot_failure", new Error(record.reason ?? "unknown"), {
+                reason: record.reason ?? "unknown",
+                elapsed_ms: record.elapsed_ms ?? 0,
+                failed_at: record.at ?? "",
+                recovered: true,
+            });
+        }
+    } catch {
+        // A boot report must never be the reason a boot fails.
+    }
+    if (boot?.slowMs) {
+        analytics.event("boot_slow", {
+            threshold_ms: boot.slowMs,
+            elapsed_ms: Math.max(0, Date.now() - boot.startedAt),
+        });
+    }
+}
+
 function liftBootCover(): void {
     // The game owns the screen now; the HTML watchdog must not fire behind it.
     const watchdog = (window as unknown as { __odysseyBootWatchdog?: number }).__odysseyBootWatchdog;
@@ -181,6 +230,9 @@ async function boot() {
     analytics.funnelStep("ftue", 1, { host: getRunCapabilities().host });
     analytics.funnelStep("ftue", 2);
     analytics.sessionStart(store.get().totalPlays === 0, await readAttribution());
+    // A failed boot could not report itself; the watchdog left the record in
+    // localStorage for this session to carry.
+    reportBootOutcome();
     const returnReminderId = await resolveReturnLaunch();
     if (returnReminderId === "d1") store.patch({ menuScreen: "daily-rewards" });
     if (import.meta.env.DEV) {
