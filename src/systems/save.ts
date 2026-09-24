@@ -63,7 +63,8 @@ export interface GameSaveV4 {
 /** @deprecated Use GameSaveV4 — kept for migrate() typing of older blobs. */
 export type GameSaveV3 = Omit<GameSaveV4, "version"> & { version: 3 };
 
-export type SaveSource = "run" | "local" | "defaults";
+/** "unavailable": RUN storage could not be read; defaults are in memory but never written to the cloud. */
+export type SaveSource = "run" | "local" | "defaults" | "unavailable";
 
 function readLocalSave(): { key: string; value: string } | null {
     try {
@@ -345,9 +346,78 @@ let lastSaved = "";
 let pendingSave: string | null = null;
 let flushInFlight: Promise<boolean> | null = null;
 
+/**
+ * Remote-write guard. A failed or timed-out RUN storage read is not a new
+ * player: writing defaults then would replace the real cloud save. Remote
+ * writes stay blocked until one read has succeeded. "blocked" means the cloud
+ * holds a save from a newer build, which this build must never overwrite.
+ */
+type RemoteState = "unverified" | "verified" | "blocked";
+let remoteState: RemoteState = "unverified";
+let verifyInFlight: Promise<void> | null = null;
+let verifyRetryTimer = 0;
+const VERIFY_RETRY_MS = [2_000, 4_000, 8_000, 15_000, 30_000] as const;
+
 function usesRunStorage(): boolean {
     const capabilities = getRunCapabilities();
     return capabilities.host && !capabilities.mock;
+}
+
+function isNewerSave(raw: string): boolean {
+    try {
+        const version = (JSON.parse(raw) as { version?: unknown } | null)?.version;
+        return typeof version === "number" && version > SAVE_VERSION;
+    } catch {
+        return false;
+    }
+}
+
+type RemoteRead = "found" | "empty" | "failed" | "newer";
+
+async function readRemote(): Promise<RemoteRead> {
+    for (const key of [SAVE_KEY, ...LEGACY_SAVE_KEYS]) {
+        const remote = await readAppStorage(key);
+        if (!remote.ok) return "failed";
+        if (remote.value === null) continue;
+        const save = parse(remote.value);
+        if (!save) {
+            if (isNewerSave(remote.value)) return "newer";
+            // Unreadable, not newer: keep a copy before it can be replaced.
+            console.warn(`[save] unreadable remote save under "${key}"; backing it up`);
+            await writeAppStorage(`${SAVE_KEY}-unreadable-backup`, remote.value);
+            continue;
+        }
+        apply(save);
+        applyLegacyArrowBagIfNeeded(true);
+        lastSaved = JSON.stringify(snapshot());
+        if (key !== SAVE_KEY) await writeAppStorage(SAVE_KEY, lastSaved);
+        return "found";
+    }
+    return "empty";
+}
+
+function settleRemote(result: RemoteRead): void {
+    if (result === "failed") return;
+    remoteState = result === "newer" ? "blocked" : "verified";
+    if (result === "newer") console.warn("[save] cloud save is from a newer build; cloud writes disabled");
+}
+
+/**
+ * Retry the read in the background. flush() never awaits this: a caller that
+ * reverts on a failed flush must not revert against a freshly applied save.
+ */
+function verifyRemote(attempt = 0): void {
+    if (remoteState !== "unverified" || verifyInFlight || verifyRetryTimer) return;
+    verifyInFlight = (async () => {
+        if (usesRunStorage()) settleRemote(await readRemote());
+    })().finally(() => {
+        verifyInFlight = null;
+        if (remoteState !== "unverified" || attempt >= VERIFY_RETRY_MS.length) return;
+        verifyRetryTimer = window.setTimeout(() => {
+            verifyRetryTimer = 0;
+            verifyRemote(attempt + 1);
+        }, VERIFY_RETRY_MS[attempt]);
+    });
 }
 
 async function persist(serialized: string): Promise<boolean> {
@@ -379,29 +449,26 @@ export const saveSystem = {
             return save ? "local" : "defaults";
         }
 
-        for (const key of [SAVE_KEY, ...LEGACY_SAVE_KEYS]) {
-            const remote = await readAppStorage(key);
-            if (!remote.ok) {
-                applyLegacyArrowBagIfNeeded(false);
-                lastSaved = JSON.stringify(snapshot());
-                return "defaults";
-            }
-            const save = parse(remote.value);
-            if (!save) continue;
-
-            apply(save);
-            applyLegacyArrowBagIfNeeded(true);
-            lastSaved = JSON.stringify(snapshot());
-            if (key !== SAVE_KEY) await writeAppStorage(SAVE_KEY, lastSaved);
-            return "run";
-        }
-
+        const result = await readRemote();
+        settleRemote(result);
+        if (result === "found") return "run";
         applyLegacyArrowBagIfNeeded(false);
         lastSaved = JSON.stringify(snapshot());
+        if (result === "failed") {
+            console.warn("[save] cloud save unreadable at boot; cloud writes paused until a read succeeds");
+            verifyRemote();
+            return "unavailable";
+        }
         return "defaults";
     },
 
     async flush(): Promise<boolean> {
+        if (usesRunStorage() && remoteState !== "verified") {
+            // Never write over a cloud save this session has not read. A host
+            // that attached after load() lands here too.
+            verifyRemote();
+            return false;
+        }
         const serialized = JSON.stringify(snapshot());
         if (serialized === lastSaved && pendingSave === null) return true;
         pendingSave = serialized;

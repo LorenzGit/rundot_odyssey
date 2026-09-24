@@ -22,7 +22,7 @@
     "format:check": "biome format .",
     "lint": "biome lint src e2e scripts/simulate-odyssey.ts playwright.config.ts vite.config.js --diagnostic-level=error --max-diagnostics=none",
     "typecheck": "tsc --noEmit",
-    "test": "npm run simulate",
+    "test": "npm run simulate && node --experimental-strip-types --experimental-test-module-mocks --no-warnings scripts/test-save-guard.ts",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "simulate": "node --experimental-strip-types scripts/simulate-odyssey.ts",

@@ -139,20 +139,18 @@ async function boot() {
 
     setBootProgress(0.05);
     bootStage = "host_and_save";
-    await Promise.all([
-        initSdk().then(() => {
-            analytics.markTransportReady();
-            analytics.funnelStep("load", 2, { host: getRunCapabilities().host });
-            applyRunSafeArea();
-        }),
-        saveSystem.load().then(() => {
-            document.documentElement.dataset.reducedMotion = String(store.get().reducedMotion);
-            document.documentElement.dataset.quality = store.get().quality;
-            restoreLocale();
-            audioManager.bind();
-            analytics.funnelStep("load", 3);
-        }),
-    ]);
+    // The save loads after the handshake: before it, the host looks absent and
+    // load() would read localStorage while later writes go to the cloud save.
+    await initSdk();
+    analytics.markTransportReady();
+    analytics.funnelStep("load", 2, { host: getRunCapabilities().host });
+    applyRunSafeArea();
+    await saveSystem.load();
+    document.documentElement.dataset.reducedMotion = String(store.get().reducedMotion);
+    document.documentElement.dataset.quality = store.get().quality;
+    restoreLocale();
+    audioManager.bind();
+    analytics.funnelStep("load", 3);
     setBootProgress(0.15);
 
     bootStage = "critical_menu_asset";
